@@ -5,7 +5,7 @@
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildDecor } from './decor.js';
-import {
+import { glossyMat,
     T, V3, scene, mat, solids, triggers, prompts, tickers, solidBox, batchBox, batchGeo, flushBatches,
     billboard, textPlane, textCanvas, texFrom, buildRig, mergeChildren,
 } from './engine.js';
@@ -214,10 +214,10 @@ function buildLobby() {
     plaza(-38, 38, -7, 7);
     // The round dais in the middle
     {
-        const top = new T.Mesh(new T.CircleGeometry(17, 64), new T.MeshPhysicalMaterial({ map: daisTex(), emissiveMap: daisTex(true), emissive: 0xff4ad8, emissiveIntensity: 2.4, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.15, envMapIntensity: 1 }));
+        const top = new T.Mesh(new T.CircleGeometry(17, 64), glossyMat({ map: daisTex(), emissiveMap: daisTex(true), emissive: 0xff4ad8, emissiveIntensity: 2.4, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.15, envMapIntensity: 1 }));
         top.rotation.x = -Math.PI / 2; top.position.set(0, 1.5, 0); top.receiveShadow = true;
         zoneGroup(-1).add(top);
-        const side = new T.Mesh(new T.CylinderGeometry(17, 17.6, 1.5, 64, 1, true), new T.MeshPhysicalMaterial({ color: 0x4a2088, roughness: 0.3, clearcoat: 1 }));
+        const side = new T.Mesh(new T.CylinderGeometry(17, 17.6, 1.5, 64, 1, true), glossyMat({ color: 0x4a2088, roughness: 0.3, clearcoat: 1 }));
         side.position.set(0, 0.75, 0); zoneGroup(-1).add(side);
         // a glowing ring around the dais that slowly shifts colour
         const ringMat = new T.MeshBasicMaterial({ color: 0xff7ad8, toneMapped: false });
@@ -394,8 +394,15 @@ function drawBoard(key, rows) {
     }
     b.tex.needsUpdate = true;
 }
+// Boards arrive every 10 s: only redraw (and re-upload) the ones whose rows changed
+const boardKeys = {};
 export function renderBoards(m) {
-    for (const [key] of BOARDS) drawBoard(key, (m && m[key]) || []);
+    for (const [key] of BOARDS) {
+        const rows = (m && m[key]) || [], k = JSON.stringify(rows);
+        if (boardKeys[key] === k) continue;
+        boardKeys[key] = k;
+        drawBoard(key, rows);
+    }
     const top = (m && m.climbs) || [];
     statues.forEach((st, i) => {
         const name = top[i] ? top[i].n : '—';
@@ -487,7 +494,7 @@ export function giantSquishy(r) {
         col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
     }
     geo.setAttribute('color', new T.BufferAttribute(col, 3));
-    const body = new T.Mesh(geo, new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.15, sheen: 0.8, sheenColor: new T.Color(0xffffff), emissive: 0x2a1a2a, emissiveIntensity: 0.25 }));
+    const body = new T.Mesh(geo, glossyMat({ vertexColors: true, roughness: 0.22, clearcoat: 1, clearcoatRoughness: 0.15, sheen: 0.8, sheenColor: new T.Color(0xffffff), emissive: 0x2a1a2a, emissiveIntensity: 0.25 }));
     body.castShadow = true; body.receiveShadow = true;
     g.add(body);
     const eyeM = new T.MeshStandardMaterial({ color: 0x1a1420, roughness: 0.1 }), white = new T.MeshBasicMaterial({ color: 0xffffff }), blush = new T.MeshBasicMaterial({ color: 0xff6aa0, transparent: true, opacity: 0.7 });
@@ -753,7 +760,7 @@ export function popAt(tile, x, z) {
 }
 function buildBounce(e) {
     const g = new T.Group(); g.position.set(e.x, e.top, e.z); zoneGroup(e.zone).add(g);
-    const disc = new T.Mesh(new T.CylinderGeometry(e.r, e.r, 0.5, 40), new T.MeshPhysicalMaterial({ color: 0xa8ff2a, roughness: 0.12, clearcoat: 1, emissive: 0x4a9a00, emissiveIntensity: 0.45 }));
+    const disc = new T.Mesh(new T.CylinderGeometry(e.r, e.r, 0.5, 40), glossyMat({ color: 0xa8ff2a, roughness: 0.12, clearcoat: 1, emissive: 0x4a9a00, emissiveIntensity: 0.45 }));
     disc.position.y = -0.25; g.add(disc);
     const ring = new T.Mesh(new T.TorusGeometry(e.r, 0.32, 10, 40), mat(0xffffff, { rough: 0.3 }));
     ring.rotation.x = Math.PI / 2; ring.position.y = -0.05; g.add(ring);
@@ -829,7 +836,7 @@ export const sweeperAngle = (w, t) => w.speed * t + w.phase;
 
 function buildCheckpoint(e) {
     const zone = e.zone;
-    const pad = new T.Mesh(new RoundedBoxGeometry(7, 0.6, 7, 2, 0.24), new T.MeshPhysicalMaterial({ map: cpPadTex(false), roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 1.4 }));
+    const pad = new T.Mesh(new RoundedBoxGeometry(7, 0.6, 7, 2, 0.24), glossyMat({ map: cpPadTex(false), roughness: 0.14, clearcoat: 1, clearcoatRoughness: 0.08, envMapIntensity: 1.4 }));
     pad.position.set(e.x, e.y + 0.1, e.z); pad.receiveShadow = true;
     zoneGroup(zone).add(pad);
     const red = mat(0xff2a3a, { rough: 0.35, emissive: 0xff1a2a, ei: 0.45 });
@@ -888,7 +895,7 @@ export function lightCheckpoint(i, on) {
 function buildSummit(e) {
     const g = new T.Group(); g.position.set(e.x, e.y, e.z); zoneGroup(e.zone).add(g);
     summitGroup = g;
-    const top = new T.Mesh(new T.CircleGeometry(e.r, 64), new T.MeshPhysicalMaterial({ map: daisTex(), emissiveMap: daisTex(true), emissive: 0xffc83a, emissiveIntensity: 2.2, roughness: 0.25, clearcoat: 1 }));
+    const top = new T.Mesh(new T.CircleGeometry(e.r, 64), glossyMat({ map: daisTex(), emissiveMap: daisTex(true), emissive: 0xffc83a, emissiveIntensity: 2.2, roughness: 0.25, clearcoat: 1 }));
     top.rotation.x = -Math.PI / 2; top.position.y = 0.01; top.receiveShadow = true; g.add(top);
     const rt = rainbowTex().clone(); rt.wrapS = T.RepeatWrapping; rt.repeat.set(3, 1); rt.needsUpdate = true;
     const side = new T.Mesh(new T.CylinderGeometry(e.r, e.r * 0.86, 3, 64, 1, true), new T.MeshStandardMaterial({ map: rt, roughness: 0.35, emissive: 0x2a0a2a, emissiveIntensity: 0.2 }));

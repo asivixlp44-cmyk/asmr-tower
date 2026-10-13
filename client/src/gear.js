@@ -1,10 +1,10 @@
 // Gear models: the coils, grappling hook, slap glove, magic carpet and jetpack. The same models sit
 // spinning on the lobby pads, ride in your hand, lie under your feet (carpet) or on your back
 // (jetpack).
-import { T, mat } from './engine.js';
+import { glossyMat, T, mat } from './engine.js';
 import { carpetTex } from './materials.js';
 
-const glossy = (color, o) => new T.MeshPhysicalMaterial({ color, roughness: o && o.rough !== undefined ? o.rough : 0.25, metalness: (o && o.metal) || 0, clearcoat: 0.8, clearcoatRoughness: 0.2, emissive: (o && o.emissive) || 0x000000, emissiveIntensity: (o && o.ei) || 0.3 });
+const glossy = (color, o) => glossyMat({ color, roughness: o && o.rough !== undefined ? o.rough : 0.25, metalness: (o && o.metal) || 0, clearcoat: 0.8, clearcoatRoughness: 0.2, emissive: (o && o.emissive) || 0x000000, emissiveIntensity: (o && o.ei) || 0.3 });
 const mats = new Map();
 const gm = (key, make) => { if (!mats.has(key)) mats.set(key, make()); return mats.get(key); };
 

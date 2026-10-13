@@ -156,6 +156,17 @@ export function mat(color, o) {
     }
     return m;
 }
+// The glossy look without MeshPhysicalMaterial: clearcoat / sheen / iridescence make shaders several
+// times bigger, and on Windows (Direct3D) each one takes ages to compile, which froze the game for
+// seconds at spawn. A standard material with a slightly lower roughness looks the same at game scale.
+const PHYSICAL_ONLY = ['clearcoat', 'clearcoatRoughness', 'sheen', 'sheenColor', 'sheenRoughness', 'iridescence', 'iridescenceIOR', 'iridescenceThicknessRange', 'transmission', 'thickness', 'ior', 'specularIntensity', 'specularColor'];
+export function glossyMat(o) {
+    o = { ...(o || {}) };
+    const coat = o.clearcoat || 0;
+    for (const k of PHYSICAL_ONLY) delete o[k];
+    if (coat && o.roughness !== undefined) o.roughness = Math.max(0.04, o.roughness * (1 - 0.35 * coat));
+    return new T.MeshStandardMaterial(o);
+}
 export function texFrom(cv, repeat) {
     const t = new T.CanvasTexture(cv);
     t.colorSpace = T.SRGBColorSpace;

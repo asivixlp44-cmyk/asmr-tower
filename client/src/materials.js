@@ -2,7 +2,7 @@
 // checker walls and lilac floor tiles like the reference, glossy jelly with a fresnel rim, wobbling
 // lime slime that dents and ripples under your feet, truss lattice, salted-butter wrappers,
 // pop-it silicone, bubble wrap, checkpoint pads and coins.
-import { T, texFrom, maxAniso } from './engine.js';
+import { glossyMat, T, texFrom, maxAniso } from './engine.js';
 
 const cache = new Map();
 const once = (key, make) => { if (!cache.has(key)) cache.set(key, make()); return cache.get(key); };
@@ -258,11 +258,11 @@ export const lilacMaterial = () => once('lilacmat', () => new T.MeshStandardMate
 export const matTime = { value: 0 };
 export const hazardMaterial = () => once('hzmat', () => new T.MeshStandardMaterial({ map: hazardTex(), roughness: 0.5 }));
 export const trussMaterial = () => once('trussmat', () => new T.MeshStandardMaterial({ map: trussTex(), alphaTest: 0.45, side: T.DoubleSide, roughness: 0.45 }));
-export const butterMaterial = () => once('buttermat', () => new T.MeshPhysicalMaterial({ map: butterTopTex(), roughness: 0.28, clearcoat: 0.7, clearcoatRoughness: 0.25, sheen: 0.5, sheenColor: new T.Color(0xfff4c8), envMapIntensity: 1.2 }));
+export const butterMaterial = () => once('buttermat', () => glossyMat({ map: butterTopTex(), roughness: 0.28, clearcoat: 0.7, clearcoatRoughness: 0.25, sheen: 0.5, sheenColor: new T.Color(0xfff4c8), envMapIntensity: 1.2 }));
 export const wrapperMaterial = () => once('wrapmat2', () => new T.MeshStandardMaterial({ map: wrapperTex(), roughness: 0.55 }));
 export const bubbleWrapMaterial = () => once('wrapmat', () => {
     const map = bubbleWrapTex();
-    return new T.MeshPhysicalMaterial({ map, transparent: true, opacity: 0.92, roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05, depthWrite: true, envMapIntensity: 1.6 });
+    return glossyMat({ map, transparent: true, opacity: 0.92, roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05, depthWrite: true, envMapIntensity: 1.6 });
 });
 
 // Glossy jelly: translucent, clear-coated, brighter at grazing angles (fresnel rim) so the shapes
@@ -309,7 +309,7 @@ const JIGGLE = `
         transformed.y += sin(uTime * 2.1 + jw.x * 0.33 + jw.z * 0.27) * 0.05 * max(normal.y, 0.0);
     }`;
 export const jellyMaterial = () => once('jellymat', () => {
-    const m = new T.MeshPhysicalMaterial({
+    const m = glossyMat({
         color: 0xffffff, vertexColors: true, roughness: 0.08, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04,
         transparent: true, opacity: 0.86, envMapIntensity: 1.45, emissive: 0x000000,
         sheen: 0.4, sheenColor: new T.Color(0xeaffea),
@@ -335,7 +335,7 @@ export const jellyMaterial = () => once('jellymat', () => {
 
 // Soap bubbles: clear, iridescent, brightest at the rim
 export const bubbleMaterial = () => once('bubblemat', () => {
-    const m = new T.MeshPhysicalMaterial({
+    const m = glossyMat({
         color: 0xffffff, roughness: 0.02, metalness: 0, transparent: true, opacity: 0.35, depthWrite: false,
         iridescence: 1, iridescenceIOR: 1.33, iridescenceThicknessRange: [250, 900], clearcoat: 1, envMapIntensity: 2.6,
     });
@@ -360,7 +360,7 @@ export const bubbleMaterial = () => once('bubblemat', () => {
     return m;
 });
 export const domeMaterial = () => once('domemat', () => {
-    const m = new T.MeshPhysicalMaterial({
+    const m = glossyMat({
         color: 0x6aff6a, roughness: 0.06, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04,
         transparent: true, opacity: 0.55, envMapIntensity: 2, depthWrite: false,
     });
@@ -368,14 +368,14 @@ export const domeMaterial = () => once('domemat', () => {
     return m;
 });
 export const vanishMaterial = (color) => {
-    const m = new T.MeshPhysicalMaterial({ color, roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.82, envMapIntensity: 1.6 });
+    const m = glossyMat({ color, roughness: 0.1, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.82, envMapIntensity: 1.6 });
     addRim(m, 0xffffff, 2.2, 0.9);
     return m;
 };
-export const popitMaterial = () => once('popitmat', () => new T.MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.34, clearcoat: 0.5, clearcoatRoughness: 0.4, sheen: 0.5, sheenColor: new T.Color(0xffffff) }));
+export const popitMaterial = () => once('popitmat', () => glossyMat({ color: 0xffffff, vertexColors: true, roughness: 0.34, clearcoat: 0.5, clearcoatRoughness: 0.4, sheen: 0.5, sheenColor: new T.Color(0xffffff) }));
 // the bubbles take their colour per instance (no vertex colours, or they'd render black)
-export const popitBubbleMaterial = () => once('popitbub', () => new T.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.3, sheen: 0.5, sheenColor: new T.Color(0xffffff) }));
-export const mochiMaterial = () => once('mochimat', () => new T.MeshPhysicalMaterial({ color: 0xfff0f6, roughness: 0.6, sheen: 1, sheenRoughness: 0.5, sheenColor: new T.Color(0xffc8e0), emissive: 0xff9ac8, emissiveIntensity: 0.06 }));
+export const popitBubbleMaterial = () => once('popitbub', () => glossyMat({ color: 0xffffff, roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.3, sheen: 0.5, sheenColor: new T.Color(0xffffff) }));
+export const mochiMaterial = () => once('mochimat', () => glossyMat({ color: 0xfff0f6, roughness: 0.6, sheen: 1, sheenRoughness: 0.5, sheenColor: new T.Color(0xffc8e0), emissive: 0xff9ac8, emissiveIntensity: 0.06 }));
 export const coinMaterial = () => once('coinmat', () => new T.MeshStandardMaterial({ map: coinTex(), color: 0xffffff, metalness: 0.55, roughness: 0.25, emissive: 0x6a4800, emissiveIntensity: 0.45 }));
 export const coinRimMaterial = () => once('coinrim', () => new T.MeshStandardMaterial({ color: 0xffbf1a, metalness: 0.8, roughness: 0.25, emissive: 0x5a3800, emissiveIntensity: 0.4 }));
 
@@ -398,7 +398,7 @@ function gelMaterial(key, o) {
     return once('gel|' + key, () => {
         let map = null;
         if (o.map) { map = o.map.clone(); map.repeat.set(o.repeat || 1, o.repeat || 1); map.needsUpdate = true; }
-        const m = new T.MeshPhysicalMaterial({
+        const m = glossyMat({
             color: o.color, map, roughness: o.rough ?? 0.14, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08,
             emissive: o.emissive, emissiveIntensity: o.emissiveIntensity, envMapIntensity: 1.5, sheen: 0.6, sheenColor: new T.Color(0xeaff9a),
         });

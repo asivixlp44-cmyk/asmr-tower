@@ -3,7 +3,7 @@
 // squishies, keycaps and pop-its floating in the middle, neon stage signs and lobby balloons.
 // Nothing here collides; it all just makes the tower glow and move.
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { T, V3, scene, tickers, texFrom } from './engine.js';
+import { glossyMat, T, V3, scene, tickers, texFrom } from './engine.js';
 import { neonVC, bubbleMaterial, matTime } from './materials.js';
 import { petModel } from './pets.js';
 import { KEYCAP_TALL, keyMaterial, letterIndex } from './keys.js';
@@ -58,7 +58,7 @@ export function buildDecor({ zoneGroup, windows, H, TOP }) {
     const rings = new T.Mesh(strip(ringGeos), neonVC(2.8));
     rings.frustumCulled = false;
     zoneGroup(-2).add(rings);
-    const mould = new T.Mesh(mergeGeometries(mouldGeos.map((g) => { g.deleteAttribute('uv'); return g; })), new T.MeshPhysicalMaterial({ color: 0x4a1e8a, roughness: 0.25, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.2 }));
+    const mould = new T.Mesh(mergeGeometries(mouldGeos.map((g) => { g.deleteAttribute('uv'); return g; })), glossyMat({ color: 0x4a1e8a, roughness: 0.25, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.2 }));
     mould.receiveShadow = true;
     mould.frustumCulled = false;
     zoneGroup(-2).add(mould);
@@ -213,7 +213,7 @@ function giantPopit() {
     const p = base.attributes.position, col = new Float32Array(p.count * 3), c = new T.Color();
     for (let i = 0; i < p.count; i++) { c.setHSL(((p.getX(i) + 6) / 12) * 0.85, 0.85, 0.64); col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; }
     base.setAttribute('color', new T.BufferAttribute(col, 3));
-    const mat = new T.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.35, clearcoat: 0.5, sheen: 0.5 });
+    const mat = glossyMat({ vertexColors: true, roughness: 0.35, clearcoat: 0.5, sheen: 0.5 });
     g.add(new T.Mesh(base, mat));
     const bub = new T.SphereGeometry(0.95, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2);
     for (let r = 0; r < 3; r++) {
@@ -222,7 +222,7 @@ function giantPopit() {
             const a = (k / n) * Math.PI * 2, rr = r * 2.1;
             const x = Math.cos(a) * rr, z = Math.sin(a) * rr;
             const bc = new T.Color().setHSL(((x + 6) / 12) * 0.85, 0.9, 0.7);
-            const m = new T.Mesh(bub, new T.MeshPhysicalMaterial({ color: bc, roughness: 0.3, clearcoat: 0.6 }));
+            const m = new T.Mesh(bub, glossyMat({ color: bc, roughness: 0.3, clearcoat: 0.6 }));
             m.position.set(x, 0.6, z);
             g.add(m);
         }

@@ -1250,9 +1250,9 @@ function frame(now) {
     pollGamepad();
     padButtons();
     if (running) update(dt);
-    else { for (const fn of tickers) fn(dt, now / 1000); updateWorld(dt, now / 1000); }
-    updateCamera(dt);
-    render();
+    else if (!warming) { for (const fn of tickers) fn(dt, now / 1000); updateWorld(dt, now / 1000); }
+    // behind the loading screen nothing needs drawing while the shaders compile
+    if (!warming || running) { updateCamera(dt); render(); }
     requestAnimationFrame(frame);
 }
 
@@ -1291,6 +1291,9 @@ async function play() {
         BX.loadingEnd();
         return;
     }
+    // every shader compiled and texture uploaded before the player appears (no spawn hitches)
+    $('#loading').textContent = 'Getting the tower ready…';
+    await Promise.race([prewarmed, new Promise((r) => setTimeout(r, 15000))]);
     joining = false;
     running = true;
     S.joinedAt = Date.now();
@@ -1363,6 +1366,59 @@ function showIdentity(id) {
 }
 function toggleLogin() { if (BX.identity().loggedIn) BX.logout(); else BX.login(); }
 
+// ----- warm-up while the loading screen is up -----
+// On Windows every new shader is compiled (GLSL -> HLSL -> bytecode) the first time it's drawn, and
+// every texture is uploaded the first time it's used: both freeze the game for a moment. Doing it all
+// here, in parallel with joining the server, means nothing new has to be prepared once you spawn:
+// every stage's materials, the pets and gear on display, a player avatar, shadows and post effects.
+let prewarmed = Promise.resolve(), warming = false;
+async function prewarm() {
+    warming = true;
+    const t0 = performance.now();
+    // a stand-in avatar so the skinned avatar shader is ready too: it downloads while the tower compiles
+    const standP = Promise.race([createAvatar(null), new Promise((r) => setTimeout(() => r(null), 6000))]).catch(() => null);
+    // everything visible and nothing culled for this one pass
+    const hidden = [], culled = [];
+    scene.traverse((o) => {
+        if (!o.visible && o !== scene) { hidden.push(o); o.visible = true; }
+        if ((o.isMesh || o.isSprite || o.isPoints) && o.frustumCulled) { culled.push(o); o.frustumCulled = false; }
+    });
+    try {
+        if (renderer.compileAsync) await renderer.compileAsync(scene, camera);
+        else renderer.compile(scene, camera);
+    } catch (e) { console.warn('[prewarm] compile', e); }
+    // upload every texture now (maps, normal maps, glow maps, and textures inside custom shaders)
+    const seen = new Set();
+    const upload = (t) => { if (t && t.isTexture && !seen.has(t)) { seen.add(t); try { renderer.initTexture(t); } catch (e) { /* skip */ } } };
+    scene.traverse((o) => {
+        const list = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+        for (const m of list) {
+            for (const k in m) upload(m[k]);
+            if (m.uniforms) for (const k in m.uniforms) upload(m.uniforms[k] && m.uniforms[k].value);
+        }
+    });
+    // one full frame with shadows and bloom, hidden behind the loading screen
+    try { render(); } catch (e) { console.warn('[prewarm] render', e); }
+    for (const o of hidden) o.visible = false;
+    for (const o of culled) o.frustumCulled = true;
+    const t1 = performance.now();
+    const stand = await standP;
+    if (stand) {
+        try {
+            stand.root.position.set(SPAWN.x, SPAWN.y, SPAWN.z + 4);
+            scene.add(stand.root);
+            if (renderer.compileAsync) await renderer.compileAsync(stand.root, camera, scene);
+            stand.root.traverse((o) => { const l = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []; for (const m of l) for (const k in m) upload(m[k]); });
+        } catch (e) { console.warn('[prewarm] avatar', e); }
+        stand.dispose();
+    }
+    console.info('[prewarm] tower', Math.round(t1 - t0), 'ms, avatar', Math.round(performance.now() - t1), 'ms');
+    nearZoneKey = '';
+    refreshNear(Math.max(-1, P.stage));
+    warming = false;
+    console.info('[prewarm] ready in', Math.round(performance.now() - t0), 'ms,', renderer.info.programs.length, 'shaders,', seen.size, 'textures');
+}
+
 async function boot() {
     BX.initBloxity();
     BX.loadingStep('Loading fonts…');
@@ -1372,6 +1428,7 @@ async function boot() {
     buildWorld();
     refreshNear(-1);
     loadBase().catch(() => {});
+    prewarmed = prewarm();
     wirePortalSettings();
     wirePortalEvents();
     BX.onIdentity((id) => {

@@ -1,7 +1,7 @@
 // Pets: cute squishies that float after you, each built from a few shapes with a face.
 // Slimes (glossy blobs), mochi buns, gummy bears, peaches, clouds, stars, keycap cats and bunnies,
 // a frog, a space-bar dog and an RGB dragon. Merged into a couple of meshes each.
-import { T, mergeChildren } from './engine.js';
+import { glossyMat, T, mergeChildren } from './engine.js';
 
 const S = (r, w, h) => new T.SphereGeometry(r, w || 24, h || 16);
 const matCache = new Map();
@@ -10,16 +10,16 @@ function petMat(def, kind) {
     if (matCache.has(key)) return matCache.get(key);
     let m;
     if (kind === 'body') {
-        if (def.shiny) m = new T.MeshPhysicalMaterial({ color: def.color, metalness: 0.75, roughness: 0.18, clearcoat: 1, emissive: 0x5a3a00, emissiveIntensity: 0.35 });
-        else if (def.rainbow) m = new T.MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.15, clearcoat: 1, emissive: 0x332233, emissiveIntensity: 0.4 });
-        else if (def.galaxy) m = new T.MeshPhysicalMaterial({ color: def.color, roughness: 0.2, clearcoat: 1, map: galaxyTex(), emissive: 0x2a1060, emissiveIntensity: 0.6 });
-        else if (def.kind === 'slime' || def.clear) m = new T.MeshPhysicalMaterial({ color: def.color, roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.86, envMapIntensity: 1.6 });
-        else m = new T.MeshPhysicalMaterial({ color: def.color, roughness: 0.5, sheen: 1, sheenColor: new T.Color(0xffffff), sheenRoughness: 0.5 });
+        if (def.shiny) m = glossyMat({ color: def.color, metalness: 0.75, roughness: 0.18, clearcoat: 1, emissive: 0x5a3a00, emissiveIntensity: 0.35 });
+        else if (def.rainbow) m = glossyMat({ color: 0xffffff, vertexColors: true, roughness: 0.15, clearcoat: 1, emissive: 0x332233, emissiveIntensity: 0.4 });
+        else if (def.galaxy) m = glossyMat({ color: def.color, roughness: 0.2, clearcoat: 1, map: galaxyTex(), emissive: 0x2a1060, emissiveIntensity: 0.6 });
+        else if (def.kind === 'slime' || def.clear) m = glossyMat({ color: def.color, roughness: 0.08, clearcoat: 1, clearcoatRoughness: 0.05, transparent: true, opacity: 0.86, envMapIntensity: 1.6 });
+        else m = glossyMat({ color: def.color, roughness: 0.5, sheen: 1, sheenColor: new T.Color(0xffffff), sheenRoughness: 0.5 });
     } else if (kind === 'eye') m = new T.MeshStandardMaterial({ color: 0x1a1420, roughness: 0.15 });
     else if (kind === 'shine') m = new T.MeshBasicMaterial({ color: 0xffffff });
     else if (kind === 'blush') m = new T.MeshBasicMaterial({ color: 0xff7aa8, transparent: true, opacity: 0.75 });
     else if (kind === 'leaf') m = new T.MeshStandardMaterial({ color: 0x46c83a, roughness: 0.5 });
-    else if (kind === 'gold') m = new T.MeshPhysicalMaterial({ color: 0xffc828, metalness: 0.85, roughness: 0.2, emissive: 0x6a4000, emissiveIntensity: 0.3 });
+    else if (kind === 'gold') m = glossyMat({ color: 0xffc828, metalness: 0.85, roughness: 0.2, emissive: 0x6a4000, emissiveIntensity: 0.3 });
     else m = new T.MeshStandardMaterial({ color: 0x1a1420 });
     matCache.set(key, m);
     return m;

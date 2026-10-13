@@ -8,7 +8,7 @@ import { T, V3, $, renderer, scene, camera, sun } from './engine.js';
 // ----- quality presets -----
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 export const QUALITIES = {
-    low: { label: 'Low', ratio: 0.85, shadows: false, bloom: false, shadowMap: 512 },
+    low: { label: 'Low', ratio: 0.85, shadows: false, bloom: false, shadowMap: 256 },
     medium: { label: 'Medium', ratio: 1, shadows: true, bloom: true, shadowMap: 1024 },
     high: { label: 'High', ratio: 1.5, shadows: true, bloom: true, shadowMap: 2048 },
 };
@@ -73,16 +73,24 @@ function buildComposer() {
     composer.addPass(new OutputPass());
     composer.addPass(new ShaderPass(GradeShader));
 }
+let appliedQuality = null;
 function applyQuality() {
     const q = QUALITIES[quality];
+    if (appliedQuality === quality) return;
+    appliedQuality = quality;
     renderer.setPixelRatio(Math.min(devicePixelRatio || 1, q.ratio));
-    renderer.shadowMap.enabled = q.shadows;
-    sun.castShadow = q.shadows;
+    // Shadows stay switched on as far as the shaders know: turning them off for real would recompile
+    // every shader in the tower (a freeze of seconds, exactly when a slow PC steps down to Low). Low
+    // fades them to nothing and skips the shadow pass instead, which is where the cost is.
+    renderer.shadowMap.enabled = true;
+    sun.castShadow = true;
+    sun.shadow.intensity = q.shadows ? 1 : 0;
+    renderer.shadowMap.autoUpdate = q.shadows;
     if (sun.shadow.mapSize.x !== q.shadowMap) {
         sun.shadow.mapSize.set(q.shadowMap, q.shadowMap);
         if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
     }
-    scene.traverse((o) => { if (o.material) { const m = Array.isArray(o.material) ? o.material : [o.material]; m.forEach((x) => { x.needsUpdate = true; }); } });
+    if (!q.shadows) renderer.shadowMap.needsUpdate = true;   // one empty-ish pass so the map exists
     if (q.bloom && !composer) buildComposer();
     resizeFx();
 }
