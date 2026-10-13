@@ -41,7 +41,7 @@ function colorize(g, color) {
     g.setAttribute('color', new T.BufferAttribute(a, 3));
     return g;
 }
-const JELLY_GREEN = new T.Color(0x3cf03c);
+const JELLY_GREEN = new T.Color(0x0fd26a);
 function jellyColor(c) {
     if (!c) return JELLY_GREEN;
     if (typeof c === 'string' && c.startsWith('rainbow:')) return new T.Color().setHSL((+c.slice(8) * 0.085) % 1, 0.9, 0.6);
@@ -79,6 +79,22 @@ function faceGeo(x, y, z, sx, sy, sz, faces, uvFn) {
     g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2));
     g.setIndex(idx);
     return g;
+}
+// A rounded, bevelled block (soft edges catch the light like moulded plastic), with UVs projected
+// in world space per face so the checker tiles keep their size on any block
+function roundBatch(material, x, y, z, sx, sy, sz, o) {
+    o = o || {};
+    const r = Math.min(o.r ?? 0.5, sx * 0.3, sy * 0.3, sz * 0.3);
+    const g = new RoundedBoxGeometry(sx, sy, sz, 2, r);
+    g.translate(x, y, z);
+    const p = g.attributes.position, nn = g.attributes.normal, uv = g.attributes.uv, tile = o.tile || 16;
+    for (let i = 0; i < p.count; i++) {
+        const ax = Math.abs(nn.getX(i)), ay = Math.abs(nn.getY(i)), az = Math.abs(nn.getZ(i));
+        if (ay >= ax && ay >= az) uv.setXY(i, p.getX(i) / tile, -p.getZ(i) / tile);
+        else if (ax >= az) uv.setXY(i, -p.getZ(i) / tile, p.getY(i) / tile);
+        else uv.setXY(i, p.getX(i) / tile, p.getY(i) / tile);
+    }
+    batchGeo(material, g, o.zone, o.cast);
 }
 const serverT = () => net.now() / 1000;
 
@@ -196,10 +212,10 @@ function buildLobby() {
     plaza(-38, 38, -7, 7);
     // The round dais in the middle
     {
-        const top = new T.Mesh(new T.CircleGeometry(17, 64), new T.MeshStandardMaterial({ map: daisTex(), roughness: 0.35, envMapIntensity: 0.9 }));
+        const top = new T.Mesh(new T.CircleGeometry(17, 64), new T.MeshPhysicalMaterial({ map: daisTex(), emissiveMap: daisTex(true), emissive: 0xff4ad8, emissiveIntensity: 2.4, roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.15, envMapIntensity: 1 }));
         top.rotation.x = -Math.PI / 2; top.position.set(0, 1.5, 0); top.receiveShadow = true;
         zoneGroup(-1).add(top);
-        const side = new T.Mesh(new T.CylinderGeometry(17, 17.6, 1.5, 64, 1, true), new T.MeshStandardMaterial({ color: 0xe8c4f2, roughness: 0.4 }));
+        const side = new T.Mesh(new T.CylinderGeometry(17, 17.6, 1.5, 64, 1, true), new T.MeshPhysicalMaterial({ color: 0x4a2088, roughness: 0.3, clearcoat: 1 }));
         side.position.set(0, 0.75, 0); zoneGroup(-1).add(side);
         // a glowing ring around the dais that slowly shifts colour
         const ringMat = new T.MeshBasicMaterial({ color: 0xff7ad8, toneMapped: false });
@@ -486,9 +502,9 @@ export function giantSquishy(r) {
 // The course
 // =====================================================================================
 const PAL = {
-    magenta: [0xff2bd6, 0xff45de, 0xf024cc],
-    green: [0x4aff3e, 0x3df234, 0x5cff52],
-    lilac: [0xeed6f8, 0xe4c8f2, 0xf4e0fa],
+    magenta: [0xe8129e, 0xf020b0, 0xd80a90],
+    green: [0x18c84c, 0x12b844, 0x22d456],
+    lilac: [0xa078e8, 0x9068dc, 0xb08af0],
 };
 const KEY_LOOK = (pal) => ({ ink: 0x2a1030, keys: PAL[pal] || PAL.lilac });
 
@@ -513,8 +529,8 @@ function buildCourse() {
         const zone = e.zone;
         switch (e.t) {
             case 'land': {
-                batchBox(GREEN(), e.x, e.top - 1.5, e.z, e.s, 3, e.s, { zone, tile: 16 });
-                batchBox(GREEN(), e.x, e.top - 4, e.z, e.s - 5, 2, e.s - 5, { zone, tile: 16 });
+                roundBatch(GREEN(), e.x, e.top - 1.5, e.z, e.s, 3, e.s, { zone, tile: 16 });
+                roundBatch(GREEN(), e.x, e.top - 4, e.z, e.s - 5, 2, e.s - 5, { zone, tile: 16 });
                 solidBox(e.x, e.top - 1.5, e.z, e.s, 3, e.s, { zone, mat: 'block' });
                 if (e.rainbow) jellyBox(e.x, e.top + 0.3, e.z, e.s - 1, 0.6, e.s - 1, 'rainbow:3', zone);
                 // glowing trim around the top edge, in the stage's colour
@@ -529,7 +545,7 @@ function buildCourse() {
                 break;
             }
             case 'block': {
-                batchBox(GREEN(), e.x, e.y, e.z, e.sx, e.sy, e.sz, { zone, tile: 16 });
+                roundBatch(GREEN(), e.x, e.y, e.z, e.sx, e.sy, e.sz, { zone, tile: 16 });
                 solidBox(e.x, e.y, e.z, e.sx, e.sy, e.sz, { zone, mat: e.sy <= 2.01 && zone >= 7 && zone <= 7 ? 'wrap' : 'block' });
                 if (zone === 7) {
                     // Bubble-wrap stage: the fixed blocks get a bubble-wrap sheet on top
@@ -540,7 +556,7 @@ function buildCourse() {
             }
             case 'keys': {
                 keyGrid(zone, KEY_LOOK(e.pal), e.x, e.z, e.sx, e.sz, e.top, rnd, null, { letters: 'ABC' });
-                batchBox(GREEN(), e.x, e.top - 2.4, e.z, e.sx + 0.8, 1.6, e.sz + 0.8, { zone, tile: 16 });
+                roundBatch(GREEN(), e.x, e.top - 2.4, e.z, e.sx + 0.8, 1.6, e.sz + 0.8, { zone, tile: 16 });
                 solidBox(e.x, e.top - 1.6, e.z, e.sx, 3.2, e.sz, { zone, mat: 'keys', keys: true });
                 // RGB-keyboard underglow around the base
                 underglows.push({ x: e.x, y: e.top - 3.3, z: e.z, sx: e.sx + 1.1, sz: e.sz + 1.1, zone });
@@ -598,7 +614,7 @@ function buildCourse() {
             const pal = ['magenta', 'green', 'lilac'][i % 3];
             keys.color(i, PAL[pal][0]);
             keys.letter(i, letterIndex('ABC'[Math.floor(rnd() * 3)]));
-            batchBox(GREEN(), e.x, e.top - e.amp - 2.2, e.z, e.sx + 0.8, 2, e.sz + 0.8, { zone, tile: 16 });
+            roundBatch(GREEN(), e.x, e.top - e.amp - 2.2, e.z, e.sx + 0.8, 2, e.sz + 0.8, { zone, tile: 16 });
             const s = solidBox(e.x, e.top - 1.5, e.z, e.sx, 3, e.sz, { zone, mat: 'keys', mover: true, piston: e, delta: new V3(), keys: true });
             s.keyMesh = keys; s.keyIdx = i;
             movers.push(s);
@@ -633,7 +649,7 @@ function buildCourse() {
     // Gear pads up in the tower (the Magic Carpet on Stage 3, like the reference)
     for (const g of TOWER_GEAR) {
         // each sits on its own little platform against the wall, next to a checkpoint landing
-        batchBox(GREEN(), g.x, g.y - 1.5, g.z, 7, 3, 9, { zone: g.zone, tile: 16 });
+        roundBatch(GREEN(), g.x, g.y - 1.5, g.z, 7, 3, 9, { zone: g.zone, tile: 16 });
         solidBox(g.x, g.y - 1.5, g.z, 7, 3, 9, { zone: g.zone, mat: 'block' });
         gearPad(g.gear, g.x, g.y, g.z, g.zone, 0.9);
     }
@@ -651,13 +667,13 @@ export function pressDome(s) { s.press = 0.12; }
 
 function buildSlime(e) {
     const zone = e.zone, green = GREEN();
-    batchBox(green, e.x, e.top - e.h / 2 - 0.3, e.z, e.sx, e.h - 0.6, e.sz, { zone, tile: 16 });
+    roundBatch(green, e.x, e.top - e.h / 2 - 0.3, e.z, e.sx, e.h - 0.6, e.sz, { zone, tile: 16 });
     // rims
     const rimH = 0.9, rt = 0.7, y = e.top - 0.05;
-    batchBox(green, e.x, y, e.z - e.sz / 2 + rt / 2, e.sx, rimH, rt, { zone, tile: 16 });
-    batchBox(green, e.x, y, e.z + e.sz / 2 - rt / 2, e.sx, rimH, rt, { zone, tile: 16 });
-    batchBox(green, e.x - e.sx / 2 + rt / 2, y, e.z, rt, rimH, e.sz - rt * 2, { zone, tile: 16 });
-    batchBox(green, e.x + e.sx / 2 - rt / 2, y, e.z, rt, rimH, e.sz - rt * 2, { zone, tile: 16 });
+    roundBatch(green, e.x, y, e.z - e.sz / 2 + rt / 2, e.sx, rimH, rt, { zone, tile: 16 });
+    roundBatch(green, e.x, y, e.z + e.sz / 2 - rt / 2, e.sx, rimH, rt, { zone, tile: 16 });
+    roundBatch(green, e.x - e.sx / 2 + rt / 2, y, e.z, rt, rimH, e.sz - rt * 2, { zone, tile: 16 });
+    roundBatch(green, e.x + e.sx / 2 - rt / 2, y, e.z, rt, rimH, e.sz - rt * 2, { zone, tile: 16 });
     const geo = new T.PlaneGeometry(e.sx - rt * 2 + 0.2, e.sz - rt * 2 + 0.2, Math.ceil(e.sx * 1.4), Math.ceil(e.sz * 1.4));
     geo.rotateX(-Math.PI / 2);
     const m = new T.Mesh(geo, slimeMaterial());
@@ -869,12 +885,12 @@ export function lightCheckpoint(i, on) {
 function buildSummit(e) {
     const g = new T.Group(); g.position.set(e.x, e.y, e.z); zoneGroup(e.zone).add(g);
     summitGroup = g;
-    const top = new T.Mesh(new T.CircleGeometry(e.r, 64), new T.MeshStandardMaterial({ map: daisTex(), roughness: 0.35 }));
+    const top = new T.Mesh(new T.CircleGeometry(e.r, 64), new T.MeshPhysicalMaterial({ map: daisTex(), emissiveMap: daisTex(true), emissive: 0xffc83a, emissiveIntensity: 2.2, roughness: 0.25, clearcoat: 1 }));
     top.rotation.x = -Math.PI / 2; top.position.y = 0.01; top.receiveShadow = true; g.add(top);
     const rt = rainbowTex().clone(); rt.wrapS = T.RepeatWrapping; rt.repeat.set(3, 1); rt.needsUpdate = true;
     const side = new T.Mesh(new T.CylinderGeometry(e.r, e.r * 0.86, 3, 64, 1, true), new T.MeshStandardMaterial({ map: rt, roughness: 0.35, emissive: 0x2a0a2a, emissiveIntensity: 0.2 }));
     side.position.y = -1.5; g.add(side);
-    const under = new T.Mesh(new T.CircleGeometry(e.r * 0.86, 48), mat(0xd8a8f0));
+    const under = new T.Mesh(new T.CircleGeometry(e.r * 0.86, 48), mat(0x3a1870));
     under.rotation.x = Math.PI / 2; under.position.y = -3; g.add(under);
     solids.push({ shape: 'cyl', cx: e.x, cz: e.z, r: e.r, min: new V3(e.x - e.r, e.y - 3, e.z - e.r), max: new V3(e.x + e.r, e.y, e.z + e.r), zone: e.zone, mat: 'tile' });
     // The WIN pad: a glowing rainbow disc with a beam of light

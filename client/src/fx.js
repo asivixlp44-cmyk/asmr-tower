@@ -19,12 +19,12 @@ if (!QUALITIES[quality]) quality = 'high';
 // Neon materials are HDR (brighter than 1) so only they cross the bloom threshold;
 // neutral tone mapping keeps every other colour close to its authored sRGB value.
 renderer.toneMapping = T.NeutralToneMapping;
-renderer.toneMappingExposure = 1.02;
+renderer.toneMappingExposure = 1.0;
 
 // Final grade, after tone mapping: a little more saturation and contrast (the punchy candy look),
 // a soft vignette and a faint pink lift in the shadows
 const GradeShader = {
-    uniforms: { tDiffuse: { value: null }, uSat: { value: 1.22 }, uContrast: { value: 1.12 }, uVignette: { value: 0.3 } },
+    uniforms: { tDiffuse: { value: null }, uSat: { value: 1.16 }, uContrast: { value: 1.16 }, uVignette: { value: 0.42 } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `uniform sampler2D tDiffuse; uniform float uSat; uniform float uContrast; uniform float uVignette; varying vec2 vUv;
         void main() {
@@ -32,7 +32,8 @@ const GradeShader = {
             float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
             vec3 col = mix(vec3(l), c.rgb, uSat);
             col = (col - 0.5) * uContrast + 0.5;
-            col += vec3(0.035, 0.0, 0.03) * (1.0 - smoothstep(0.0, 0.45, l));
+            col += vec3(0.025, -0.01, 0.05) * (1.0 - smoothstep(0.0, 0.4, l));
+            col = mix(col, col * col * (3.0 - 2.0 * col), 0.25);
             vec2 q = vUv - 0.5;
             col *= 1.0 - uVignette * smoothstep(0.35, 0.85, length(q * vec2(1.0, 0.85)) * 1.25);
             gl_FragColor = vec4(clamp(col, 0.0, 1.0), c.a);
@@ -56,7 +57,18 @@ function buildComposer() {
     composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     composer.addPass(new ShaderPass(ClampShader));
-    bloomPass = new UnrealBloomPass(new T.Vector2(innerWidth / 2, innerHeight / 2), 0.55, 0.45, 1.9);
+    bloomPass = new UnrealBloomPass(new T.Vector2(innerWidth / 2, innerHeight / 2), 0.5, 0.4, 1.35);
+    // Only saturated, bright colours glow: the neon. White sun glints on glossy jelly or the gel
+    // floor are bright but colourless, so they never turn into a white blur around the player.
+    bloomPass.materialHighPassFilter.fragmentShader = `uniform sampler2D tDiffuse; uniform float luminosityThreshold; uniform float smoothWidth; varying vec2 vUv;
+        void main() {
+            vec4 c = texture2D(tDiffuse, vUv);
+            float mx = max(max(c.r, c.g), c.b), mn = min(min(c.r, c.g), c.b);
+            float sat = (mx - mn) / max(mx, 1e-4);
+            float a = smoothstep(luminosityThreshold, luminosityThreshold + 0.4, mx) * smoothstep(0.45, 0.75, sat);
+            gl_FragColor = vec4(min(c.rgb, vec3(4.0)) * a, a);
+        }`;
+    bloomPass.materialHighPassFilter.needsUpdate = true;
     composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
     composer.addPass(new ShaderPass(GradeShader));

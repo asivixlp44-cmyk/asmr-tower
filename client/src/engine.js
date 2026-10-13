@@ -17,8 +17,8 @@ renderer.shadowMap.type = T.PCFSoftShadowMap;
 export const scene = new T.Scene();
 export const FOG = 0xb070ff;
 // a soft violet haze, so looking up or down the tall tower fades into depth
-scene.fog = new T.Fog(0xa678e8, 140, 760);
-scene.background = new T.Color(0x3a1a7a);
+scene.fog = new T.Fog(0x2a0f52, 110, 560);
+scene.background = new T.Color(0x1a0838);
 
 // ----- sky: the reference's dreamy purple night -----
 // Deep violet overhead melting into hot magenta at the horizon, soft dark-purple clouds drifting
@@ -86,17 +86,49 @@ function resize() {
 addEventListener('resize', resize);
 resize();
 
-// Soft studio reflections for the glossy jelly, slime and keys; a bright Roblox-like fill so the
-// inside of the tower reads clearly; the sun adds direction and soft shadows
+// Reflections come from a dark "neon club" room: deep purple walls with glowing pink, cyan, violet
+// and mint strips and a soft lavender light overhead, so every glossy surface (jelly, slime, keys,
+// the gel floor) picks up colourful neon streaks instead of plain white studio light.
+function neonRoom() {
+    const room = new T.Scene();
+    const box = new T.Mesh(new T.BoxGeometry(20, 12, 20), new T.MeshBasicMaterial({ color: 0x140826, side: T.BackSide }));
+    box.position.y = 4;
+    room.add(box);
+    const strip = (color, k, w, h, x, y, z, ry) => {
+        const m = new T.MeshBasicMaterial({ color });
+        m.color.multiplyScalar(k);
+        const p = new T.Mesh(new T.PlaneGeometry(w, h), m);
+        p.position.set(x, y, z); p.rotation.y = ry || 0;
+        p.lookAt(0, y, 0);
+        room.add(p);
+    };
+    strip(0xff3fb8, 6, 14, 0.8, 0, 6, -9.8);      // pink band, back
+    strip(0x3ae0ff, 5, 14, 0.8, 0, 2.5, 9.8);     // cyan band, front
+    strip(0x9a5aff, 5, 0.8, 9, 9.8, 4, 0);        // violet column, right
+    strip(0x5affb0, 4, 0.8, 9, -9.8, 4, 0);       // mint column, left
+    strip(0xff7ad8, 4, 6, 3, -6, 7, -9.7);        // soft pink panel
+    const top = new T.Mesh(new T.PlaneGeometry(10, 10), new T.MeshBasicMaterial({ color: new T.Color(0xf0e0ff).multiplyScalar(2.6) }));
+    top.position.y = 9.9; top.rotation.x = Math.PI / 2;
+    room.add(top);
+    return room;
+}
 {
     const pm = new T.PMREMGenerator(renderer);
-    scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = 0.7;
+    scene.environment = pm.fromScene(neonRoom(), 0.035).texture;
+    scene.environmentIntensity = 0.85;
     pm.dispose();
 }
-export const hemi = new T.HemisphereLight(0xfff0ff, 0x8a5ad0, 0.75);
+void RoomEnvironment;
+export const hemi = new T.HemisphereLight(0xd8c4ff, 0x2a1048, 0.6);
 scene.add(hemi);
-export const sun = new T.DirectionalLight(0xfff0e8, 2.15);
+// Two coloured accent lights travel with the player (main.js), tinted by the stage you're on
+export const accentA = new T.PointLight(0xff4ad8, 260, 60, 1.8);
+export const accentB = new T.PointLight(0x3ad8ff, 200, 60, 1.8);
+scene.add(accentA, accentB);
+// a soft fill from the camera's side, so characters and pets always read clearly against the dark
+export const camFill = new T.DirectionalLight(0xe8dcff, 0.55);
+scene.add(camFill, camFill.target);
+export const sun = new T.DirectionalLight(0xffe6f0, 1.75);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 300 });

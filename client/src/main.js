@@ -1,6 +1,6 @@
 import { Client } from '@colyseus/sdk';
 import {
-    T, V3, $, canvas, scene, camera, sun, renderer, solids, triggers, prompts, tickers,
+    T, V3, $, canvas, scene, camera, sun, renderer, solids, triggers, prompts, tickers, accentA, accentB, camFill,
     billboard, buildRig, animRig, airPose, climbPose, holdPose, floatText, updateEffects, lerpAngle, updateSky,
 } from './engine.js';
 import { S, actions, net } from './state.js';
@@ -780,7 +780,7 @@ function updateRope() {
     } else if (rope) rope.visible = false;
 }
 
-const camDir = new V3(), camGoal = new V3(), camPos = new V3();
+const camDir = new V3(), camGoal = new V3(), camPos = new V3(), accTmp = new T.Color();
 let baseFov = camera.fov;
 function updateCamera(dt) {
     const t = performance.now() / 1000;
@@ -809,6 +809,13 @@ function updateCamera(dt) {
     if (Math.abs(camera.fov - baseFov) > 0.01) { camera.fov = baseFov; camera.updateProjectionMatrix(); }
     sun.position.set(P.pos.x + 40, P.pos.y + 90, P.pos.z - 70);
     sun.target.position.copy(P.pos);
+    // the accent lights ride along: one in the stage colour above and in front, one cool cyan behind
+    const acc = STAGES[Math.max(0, P.stage)];
+    accentA.position.set(P.pos.x + Math.sin(t * 0.4) * 9, P.pos.y + 11, P.pos.z + Math.cos(t * 0.4) * 9);
+    accentB.position.set(P.pos.x - Math.sin(t * 0.4) * 10, P.pos.y + 6, P.pos.z - Math.cos(t * 0.4) * 10);
+    accentA.color.lerp(accTmp.set(acc ? acc.bar : 0xff4ad8), Math.min(1, dt * 2));
+    camFill.position.copy(camera.position).add(camDir.clone().multiplyScalar(4)).setY(camera.position.y + 6);
+    camFill.target.position.copy(cam.target);
     updateSky(camera.position, t);
     const st = STAGES[Math.max(0, P.stage)];
     updateAmbient(camera.position, t, st ? st.accent : 0xff8ad8);

@@ -39,9 +39,9 @@ function checker(c1, c2, grout, seed) {
     for (let tj = 0; tj < 8; tj++) for (let ti = 0; ti < 8; ti++) { x.save(); x.translate(ti * 64, tj * 64); x.fillRect(2, 2, 60, 20); x.restore(); }
     return texFrom(c, true);
 }
-export const greenWallTex = () => once('gw', () => checker(0x4cf04a, 0x36d838, 'rgba(10,90,10,0.9)', 3));
-export const purpleWallTex = () => once('pw', () => checker(0xd2a6f6, 0xb886ea, 'rgba(90,40,140,0.85)', 5));
-export const greenFloorTex = () => once('gf', () => checker(0x5aff52, 0x46ec44, 'rgba(20,110,20,0.7)', 9));
+export const greenWallTex = () => once('gw', () => checker(0x1cbf4e, 0x12a03e, 'rgba(0,38,12,0.95)', 3));
+export const purpleWallTex = () => once('pw', () => checker(0x6a34c0, 0x5526a6, 'rgba(22,4,52,0.95)', 5));
+export const greenFloorTex = () => once('gf', () => checker(0x16b84a, 0x0e9a3a, 'rgba(0,40,14,0.9)', 9));
 
 // Bevelled tiles as a normal map: every tile is a slightly raised square with soft rounded edges,
 // so walls and floors catch the light like real glazed tiles instead of flat colour
@@ -76,10 +76,10 @@ export const tileNormal128 = () => once('tn128', () => bevelNormal(512, 128, 9, 
 export const lilacFloorTex = () => once('lf', () => {
     const N = 512, c = canvas(N), x = c.getContext('2d'), rnd = seeded(11);
     for (let j = 0; j < 4; j++) for (let i = 0; i < 4; i++) {
-        x.fillStyle = shade(0xf6def8, 0.965 + rnd() * 0.05);
+        x.fillStyle = shade(0x9c7ad6, 0.95 + rnd() * 0.08);
         x.fillRect(i * 128, j * 128, 128, 128);
     }
-    x.strokeStyle = 'rgba(190,140,210,0.75)'; x.lineWidth = 3;
+    x.strokeStyle = 'rgba(40,14,80,0.85)'; x.lineWidth = 3;
     for (let k = 0; k <= 4; k++) {
         x.beginPath(); x.moveTo(k * 128, 0); x.lineTo(k * 128, N); x.stroke();
         x.beginPath(); x.moveTo(0, k * 128); x.lineTo(N, k * 128); x.stroke();
@@ -89,13 +89,17 @@ export const lilacFloorTex = () => once('lf', () => {
     return texFrom(c, true);
 });
 // Round dais in the middle of the lobby: lilac with a big flower-star inlay (as in the reference)
-export const daisTex = () => once('dais', () => {
+export const daisTex = (glow) => once('dais' + (glow ? 'g' : ''), () => {
     const N = 1024, c = canvas(N), x = c.getContext('2d');
-    x.fillStyle = '#f2d8f6'; x.fillRect(0, 0, N, N);
+    if (glow) { x.fillStyle = '#000'; x.fillRect(0, 0, N, N); } else {
+        const g = x.createRadialGradient(N / 2, N / 2, 40, N / 2, N / 2, N / 2);
+        g.addColorStop(0, '#5a2a9a'); g.addColorStop(1, '#3a1870');
+        x.fillStyle = g; x.fillRect(0, 0, N, N);
+    }
     x.translate(N / 2, N / 2);
-    x.strokeStyle = 'rgba(200,150,220,0.9)'; x.lineWidth = 6;
+    x.strokeStyle = glow ? '#fff' : 'rgba(255,160,240,0.9)'; x.lineWidth = 6;
     for (let r = 120; r < 520; r += 130) { x.beginPath(); x.arc(0, 0, r, 0, Math.PI * 2); x.stroke(); }
-    x.lineWidth = 10; x.strokeStyle = 'rgba(214,170,236,1)';
+    x.lineWidth = 10; x.strokeStyle = glow ? '#fff' : 'rgba(255,180,245,1)';
     for (let k = 0; k < 8; k++) {
         x.save(); x.rotate(k * Math.PI / 4);
         x.beginPath(); x.moveTo(0, 0); x.quadraticCurveTo(140, 120, 0, 500); x.quadraticCurveTo(-140, 120, 0, 0); x.stroke();
@@ -118,7 +122,7 @@ export const hazardTex = () => once('hz', () => {
 export const trussTex = () => once('truss', () => {
     const N = 128, c = canvas(N), x = c.getContext('2d');
     x.clearRect(0, 0, N, N);
-    x.strokeStyle = '#34d634'; x.lineCap = 'square';
+    x.strokeStyle = '#1fc050'; x.lineCap = 'square';
     x.lineWidth = 12; x.strokeRect(6, 6, N - 12, N - 12);
     x.lineWidth = 9;
     x.beginPath(); x.moveTo(10, 10); x.lineTo(N - 10, N - 10); x.moveTo(N - 10, 10); x.lineTo(10, N - 10); x.stroke();
@@ -382,7 +386,7 @@ export const slimeMaterial = () => gelMaterial('slime', {
 // The lobby's green floor: a glossy gel with the green checker showing through, softly rippling
 // and denting under your feet (same shader as the slime, calmer waves)
 export const floorGelMaterial = () => gelMaterial('floorgel', {
-    color: 0xffffff, map: greenFloorTex(), repeat: 8, emissive: 0x0a4a10, emissiveIntensity: 0.25, amp: 0.45, hi: '0.75, 1.0, 0.7', rough: 0.2,
+    color: 0xffffff, map: greenFloorTex(), repeat: 8, emissive: 0x06300c, emissiveIntensity: 0.2, amp: 0.2, hi: '0.55, 0.95, 0.6', rough: 0.24, mix: 0.18,
 });
 function gelMaterial(key, o) {
     return once('gel|' + key, () => {
@@ -427,7 +431,7 @@ function gelShader(sh, o) {
             .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.y += sh0;');
         sh.fragmentShader = sh.fragmentShader
             .replace('#include <common>', '#include <common>\nvarying float vSlimeH;')
-            .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb * 0.82, vec3(' + o.hi + '), smoothstep(-0.1, 0.32, vSlimeH) * 0.55);');
+            .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb * 0.82, vec3(' + o.hi + '), smoothstep(-0.1, 0.32, vSlimeH) * ' + (o.mix ?? 0.55).toFixed(2) + ');');
     }
 }
 

@@ -45,12 +45,12 @@ export function buildDecor({ zoneGroup, windows, H, TOP }) {
                 const len = p1 - p0, mid = (p0 + p1) / 2;
                 const n = [[0, 1], [0, -1], [1, 0], [-1, 0]][wall];
                 for (const dy of [0.75, -0.75]) {
-                    const g = new T.BoxGeometry(wall < 2 ? len : 0.5, 0.42, wall < 2 ? 0.5 : len);
-                    g.translate(wall < 2 ? mid : n[0] * (inner - 0.55), y + dy, wall < 2 ? n[1] * (inner - 0.55) : mid);
+                    const g = new T.BoxGeometry(wall < 2 ? len : 0.3, 0.42, wall < 2 ? 0.3 : len);
+                    g.translate(wall < 2 ? mid : n[0] * (inner - 0.3), y + dy, wall < 2 ? n[1] * (inner - 0.3) : mid);
                     ringGeos.push(colorize(g, col));
                 }
-                const mg = new T.BoxGeometry(wall < 2 ? len : 0.9, 3.2, wall < 2 ? 0.9 : len);
-                mg.translate(wall < 2 ? mid : n[0] * (inner - 0.1), y, wall < 2 ? n[1] * (inner - 0.1) : mid);
+                const mg = new T.BoxGeometry(wall < 2 ? len : 0.5, 3.2, wall < 2 ? 0.5 : len);
+                mg.translate(wall < 2 ? mid : n[0] * (inner + 0.05), y, wall < 2 ? n[1] * (inner + 0.05) : mid);
                 mouldGeos.push(mg);
             }
         }
@@ -58,7 +58,7 @@ export function buildDecor({ zoneGroup, windows, H, TOP }) {
     const rings = new T.Mesh(strip(ringGeos), neonVC(2.8));
     rings.frustumCulled = false;
     zoneGroup(-2).add(rings);
-    const mould = new T.Mesh(mergeGeometries(mouldGeos.map((g) => { g.deleteAttribute('uv'); return g; })), new T.MeshPhysicalMaterial({ color: 0x9a6ad8, roughness: 0.3, metalness: 0.1, clearcoat: 0.6, clearcoatRoughness: 0.3 }));
+    const mould = new T.Mesh(mergeGeometries(mouldGeos.map((g) => { g.deleteAttribute('uv'); return g; })), new T.MeshPhysicalMaterial({ color: 0x4a1e8a, roughness: 0.25, metalness: 0.2, clearcoat: 1, clearcoatRoughness: 0.2 }));
     mould.receiveShadow = true;
     mould.frustumCulled = false;
     zoneGroup(-2).add(mould);
@@ -73,7 +73,7 @@ export function buildDecor({ zoneGroup, windows, H, TOP }) {
         g.setAttribute('color', new T.BufferAttribute(col, 3));
         pil.push(g);
     }
-    const pillars = new T.Mesh(strip(pil), neonVC(2.6));
+    const pillars = new T.Mesh(strip(pil), neonVC(1.7));
     pillars.frustumCulled = false;
     zoneGroup(-2).add(pillars);
 
@@ -116,7 +116,7 @@ export function buildDecor({ zoneGroup, windows, H, TOP }) {
             fragmentShader: `uniform float uTime; uniform vec3 uColor; varying float vA; varying vec3 vN; varying vec3 vV; varying vec3 vW;
                 void main() {
                     float edge = pow(abs(dot(vN, vV)), 1.4);
-                    float a = pow(1.0 - vA, 1.6) * edge * 0.15;
+                    float a = pow(1.0 - vA, 1.8) * edge * 0.075;
                     a *= 0.72 + 0.28 * sin(uTime * 0.6 + vW.y * 0.09 + vW.x * 0.05 + vW.z * 0.04);
                     gl_FragColor = vec4(uColor, a);
                 }`,
