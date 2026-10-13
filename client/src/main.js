@@ -552,7 +552,8 @@ async function connect(name) {
         renderHotbar();
         refreshModal(); refreshDaily(); refreshSpin();
         openDailyOnJoin();
-        if (first) { BX.loadCatalogPrices().then((changed) => { if (changed) { refreshGearPads(); refreshModal(); } }); }
+        // live Bux prices from the Bloxity IAP catalog (only there: a local server has no catalog)
+        if (first && (ON_BLOXITY_HOST || BX.isEmbedded())) { BX.loadCatalogPrices().then((changed) => { if (changed) { refreshGearPads(); refreshModal(); } }); }
     });
     room.onMessage('toast', (m) => toast(m.text, m.color));
     room.onMessage('announce', (m) => toast(m.text, m.color));
