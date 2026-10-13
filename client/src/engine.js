@@ -16,7 +16,8 @@ renderer.shadowMap.type = T.PCFSoftShadowMap;
 
 export const scene = new T.Scene();
 export const FOG = 0xb070ff;
-scene.fog = new T.Fog(FOG, 420, 1600);
+// a soft violet haze, so looking up or down the tall tower fades into depth
+scene.fog = new T.Fog(0xa678e8, 140, 760);
 scene.background = new T.Color(0x3a1a7a);
 
 // ----- sky: the reference's dreamy purple night -----
@@ -53,6 +54,15 @@ const skyMat = new T.ShaderMaterial({
             vec3 q = floor(d * 420.0);
             float st = step(0.9966, hash(q)) * smoothstep(0.08, 0.4, h) * (1.0 - cloud);
             col += vec3(1.0, 0.92, 1.0) * st * (0.55 + 0.45 * sin(uTime * 2.3 + hash(q + 3.1) * 40.0));
+            // a big soft moon with a glowing halo and faint craters
+            vec3 md = normalize(vec3(-0.55, 0.38, 0.74));
+            float mc = dot(d, md);
+            float disc = smoothstep(0.99905, 0.99935, mc);
+            vec3 tang = normalize(cross(md, vec3(0.0, 1.0, 0.0))), bit = cross(tang, md);
+            vec2 mp = vec2(dot(d, tang), dot(d, bit)) * 30.0;
+            float crater = 0.88 + 0.12 * n2(mp * 3.0 + 4.0) - 0.1 * smoothstep(0.55, 0.7, n2(mp * 1.6));
+            col = mix(col, vec3(1.0, 0.95, 1.0) * crater * 1.25, disc * (1.0 - cloud * 0.7));
+            col += vec3(0.95, 0.7, 1.0) * (pow(max(mc, 0.0), 900.0) * 0.6 + pow(max(mc, 0.0), 40.0) * 0.18) * (1.0 - cloud * 0.5);
             gl_FragColor = vec4(col, 1.0);
         }`,
 });
@@ -81,12 +91,12 @@ resize();
 {
     const pm = new T.PMREMGenerator(renderer);
     scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = 0.75;
+    scene.environmentIntensity = 0.7;
     pm.dispose();
 }
-export const hemi = new T.HemisphereLight(0xfff4ff, 0xb48ae0, 1.15);
+export const hemi = new T.HemisphereLight(0xfff0ff, 0x8a5ad0, 0.75);
 scene.add(hemi);
-export const sun = new T.DirectionalLight(0xfff2f8, 1.35);
+export const sun = new T.DirectionalLight(0xfff0e8, 2.15);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 Object.assign(sun.shadow.camera, { left: -60, right: 60, top: 60, bottom: -60, near: 1, far: 300 });

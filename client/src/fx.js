@@ -24,7 +24,7 @@ renderer.toneMappingExposure = 1.02;
 // Final grade, after tone mapping: a little more saturation and contrast (the punchy candy look),
 // a soft vignette and a faint pink lift in the shadows
 const GradeShader = {
-    uniforms: { tDiffuse: { value: null }, uSat: { value: 1.12 }, uContrast: { value: 1.04 }, uVignette: { value: 0.2 } },
+    uniforms: { tDiffuse: { value: null }, uSat: { value: 1.22 }, uContrast: { value: 1.12 }, uVignette: { value: 0.3 } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `uniform sampler2D tDiffuse; uniform float uSat; uniform float uContrast; uniform float uVignette; varying vec2 vUv;
         void main() {
@@ -42,7 +42,7 @@ const GradeShader = {
 // Before the bloom: clamp very bright pixels (sun glints on clear-coated jelly can be hundreds of
 // times brighter than white) and drop NaNs, so bloom only makes neon glow instead of big blobs
 const ClampShader = {
-    uniforms: { tDiffuse: { value: null }, uMax: { value: 2.6 } },
+    uniforms: { tDiffuse: { value: null }, uMax: { value: 3.4 } },
     vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
     fragmentShader: `uniform sampler2D tDiffuse; uniform float uMax; varying vec2 vUv;
         void main() {
@@ -56,7 +56,7 @@ function buildComposer() {
     composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
     composer.addPass(new ShaderPass(ClampShader));
-    bloomPass = new UnrealBloomPass(new T.Vector2(innerWidth / 2, innerHeight / 2), 0.3, 0.4, 1.9);
+    bloomPass = new UnrealBloomPass(new T.Vector2(innerWidth / 2, innerHeight / 2), 0.55, 0.45, 1.9);
     composer.addPass(bloomPass);
     composer.addPass(new OutputPass());
     composer.addPass(new ShaderPass(GradeShader));

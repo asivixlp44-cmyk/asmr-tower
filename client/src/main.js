@@ -17,7 +17,8 @@ import {
     pressDome, touchVanish, popAt, jiggle, squishBig, sweepers, sweeperAngle, popits,
 } from './world.js';
 import { redrawAtlas, keyAt, pressKey, pressAround, updatePressed, KEY } from './keys.js';
-import { tickSlime, slimeFeet } from './materials.js';
+import { tickSlime, slimeFeet, jellyHit } from './materials.js';
+import { setDecorLow } from './decor.js';
 import { heldModel, carpet as carpetModel, waveCarpet, jetpack as jetpackModel } from './gear.js';
 import { PetTrain } from './pets.js';
 import {
@@ -386,6 +387,8 @@ class Remote {
         this.vy = dt > 0 ? (r.position.y - this.lastY) / dt : 0;
         this.lastX = r.position.x; this.lastZ = r.position.z; this.lastY = r.position.y;
         const air = p.anim === 2, climb = p.anim === 3, fly = p.anim === 4;
+        if (this.wasAir && !air && !fly) { const g = groundUnder(r.position); if (g && g.mat === 'jelly') jellyHit(r.position.x, r.position.y, r.position.z, 1); }
+        this.wasAir = air;
         const moving = p.anim === 1 && this.vel > 1;
         this.phase += dt * (moving ? Math.min(18, 4 + this.vel * 0.3) : climb ? 9 : 0);
         if (climb) climbPose(u.body, this.phase); else if (air) airPose(u.body); else if (moving) animRig(u.body, this.phase, 0.85); else animRig(u.body, 0, 0);
@@ -402,7 +405,9 @@ class Remote {
         // keys pressed under them
         const onKeys = !air && !fly && pressAround(r.position.x, r.position.y, r.position.z, 0.9);
         this.sink = keySink(this.sink || 0, !air && !fly, onKeys, dt);
-        u.pivot.position.y = PIVOT - this.sink;
+        u.pivot.position.y = PIVOT - this.sink + (moving ? Math.abs(Math.sin(this.phase)) * 0.16 : 0);
+        this.lean = (this.lean || 0) + ((moving ? 0.13 : fly ? 0.2 : 0) - (this.lean || 0)) * Math.min(1, dt * 8);
+        u.pivot.rotation.x = this.lean;
         setTool(r, p.tool); setTrail(r, p.trail);
         if (u.carpet) { u.carpet.visible = fly; if (fly) waveCarpet(u.carpet, t, 1); }
         if (u.jet && (air || fly) && this.vy > 2 && Math.random() < dt * 30) for (const n of [-0.45, 0.45]) flame(r.localToWorld(new V3(n, 1.6, -1)), 0.3, 0.9, new V3(0, -12, 0));
@@ -881,21 +886,23 @@ function footStep(g) {
     if (m === 'keys') return;       // keys click per key (below)
     if (m === 'popit') return;      // bubbles pop per bubble (below)
     asmrStep(surfaceSound(m), false);
-    if (m === 'slime') {
+    if (m === 'jelly') jellyHit(P.pos.x, P.pos.y, P.pos.z, 0.35);
+    if (m === 'slime' || m === 'floor') {
         const side = (P.lastStepN % 2 ? 0.55 : -0.55);
         const fx = P.pos.x + Math.cos(P.facing) * side, fz = P.pos.z - Math.sin(P.facing) * side;
         slimeFeet[stepRipple].set(fx, fz, 0.9, 0);
         stepRipple = stepRipple % 7 + 1;
-        if (Math.random() < 0.6) splash(new V3(fx, P.pos.y, fz), 0xb8ff2a, 3, 0.6);
+        if (m === 'slime' && Math.random() < 0.6) splash(new V3(fx, P.pos.y, fz), 0xb8ff2a, 3, 0.6);
     } else if (m === 'butter' && Math.random() < 0.3) splash(P.pos, 0xffe48a, 2, 0.4);
     else if (m === 'wrap') popSpark(P.pos, 0x9ae8ff);
 }
 function land(g, hard) {
     const m = g.mat;
     asmrStep(surfaceSound(m), true);
+    if (m === 'jelly') jellyHit(P.pos.x, P.pos.y, P.pos.z, hard ? 1.5 : 1);
     if (SPLASH[m]) splash(P.pos, SPLASH[m], hard ? 14 : 7, hard ? 1.2 : 0.8);
     else dust(P.pos, hard ? 10 : 5, hard ? 1.3 : 0.9);
-    if (m === 'slime') { slimeFeet[stepRipple].set(P.pos.x, P.pos.z, 1.6, 0); stepRipple = stepRipple % 7 + 1; }
+    if (m === 'slime' || m === 'floor') { slimeFeet[stepRipple].set(P.pos.x, P.pos.z, m === 'floor' ? 1.1 : 1.6, 0); stepRipple = stepRipple % 7 + 1; }
     P.squashV -= hard ? 8 : 4;
 }
 
@@ -1063,7 +1070,7 @@ function update(dt) {
     }
     for (const tile of popits) if (tile.flipped) { tile.flipped = false; if (tile.group.position.distanceTo(P.pos) < 30) popitFlip(); }
     // slime under your feet dents
-    const onSlime = gr && gr.slime;
+    const onSlime = gr && (gr.slime || gr.mat === 'floor');
     P.slime += ((onSlime ? 1 : 0) - P.slime) * Math.min(1, dt * 8);
     slimeFeet[0].set(P.pos.x, P.pos.z, P.slime * 0.8, 0.1);
     for (let i = 1; i < 8; i++) slimeFeet[i].w += dt;
@@ -1154,8 +1161,17 @@ function update(dt) {
         if (pressKey(under) && t - P.lastClick > 0.07) { P.lastClick = t; asmrStep('keys', P.airTime > 0.25); }
         const onKeys = P.onGround && pressAround(P.pos.x, P.pos.y, P.pos.z, 0.9);
         P.sink = keySink(P.sink || 0, P.onGround, onKeys, dt);
-        const slimeSink = P.slime * 0.35;
-        u.pivot.position.y = PIVOT - P.sink - slimeSink;
+        const slimeSink = P.slime * (gr && gr.mat === 'floor' ? 0.12 : 0.35);
+        const runBob = P.onGround && P.moving && !P.climbing ? Math.abs(Math.sin(P.animPhase)) * 0.18 : 0;
+        u.pivot.position.y = PIVOT - P.sink - slimeSink + runBob;
+        const leanTo = P.climbing ? 0 : P.flying ? (P.moving ? 0.28 : 0) : P.onGround && P.moving ? Math.min(0.17, ws * 0.007) : !P.onGround ? -0.06 : 0;
+        P.lean = (P.lean || 0) + (leanTo - (P.lean || 0)) * Math.min(1, dt * 9);
+        let turn = P.facing - (P.prevFacing ?? P.facing);
+        turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+        P.prevFacing = P.facing;
+        const rollTo = clamp(-turn / Math.max(dt, 1e-3) * 0.045, -0.22, 0.22) * (P.moving ? 1 : 0);
+        P.roll = (P.roll || 0) + (rollTo - (P.roll || 0)) * Math.min(1, dt * 7);
+        u.pivot.rotation.set(P.lean, 0, P.roll);
         P.squashV += (1 - P.squash) * 180 * dt;
         P.squashV *= Math.exp(-12 * dt);
         P.squash = clamp(P.squash + P.squashV * dt, 0.72, 1.28);
@@ -1175,7 +1191,7 @@ function update(dt) {
     updatePrompt();
     animateCounters(dt);
     hudT -= dt;
-    if (hudT <= 0) { hudT = 0.1; updateHud(); renderHotbar(); }
+    if (hudT <= 0) { hudT = 0.1; updateHud(); renderHotbar(); setDecorLow(getQuality() === 'low'); }
     progT -= dt;
     if (progT <= 0) {
         progT = 0.25;

@@ -3,14 +3,16 @@
 // statues, donate board, gear pads) and every course element from shared/course.js with its
 // collider and animation.
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildDecor } from './decor.js';
 import {
     T, V3, scene, mat, solids, triggers, prompts, tickers, solidBox, batchBox, batchGeo, flushBatches,
     billboard, textPlane, textCanvas, texFrom, buildRig, mergeChildren,
 } from './engine.js';
 import {
     wallMaterial, lilacMaterial, hazardMaterial, trussMaterial, butterMaterial, wrapperMaterial, jellyMaterial, domeMaterial,
-    vanishMaterial, popitMaterial, mochiMaterial, coinMaterial, coinRimMaterial, slimeMaterial, cpPadTex, daisTex, rainbowTex,
-    bubbleWrapMaterial, softTex, neon,
+    vanishMaterial, popitMaterial, popitBubbleMaterial, mochiMaterial, coinMaterial, coinRimMaterial, slimeMaterial, cpPadTex, daisTex, rainbowTex,
+    bubbleWrapMaterial, softTex, neon, floorGelMaterial,
 } from './materials.js';
 import { keyGrid, flushKeys, dynamicKeys, letterIndex } from './keys.js';
 import { gearModel } from './gear.js';
@@ -86,7 +88,16 @@ const serverT = () => net.now() / 1000;
 function buildShell() {
     const purple = wallMaterial('purple'), green = GREEN(), floor = wallMaterial('floor');
     // Lobby floor: glossy green, the lilac walkways sit on it
-    batchBox(floor, 0, -2, 0, H * 2, 4, H * 2, { tile: 16, zone: -2 });
+    batchBox(floor, 0, -2.2, 0, H * 2, 3.6, H * 2, { tile: 16, zone: -2, skip: [2] });
+    {
+        // the visible floor is a rippling gel surface (the collider stays flat at y = 0)
+        const g = new T.PlaneGeometry(H * 2, H * 2, 110, 110);
+        g.rotateX(-Math.PI / 2);
+        const gel = new T.Mesh(g, floorGelMaterial());
+        gel.position.y = -0.12;
+        gel.receiveShadow = true;
+        zoneGroup(-2).add(gel);
+    }
     solidBox(0, -2, 0, H * 2, 4, H * 2, { mat: 'floor' });
     // Lobby walls (purple) and the tower above (green), 4 sides
     const LW = TOWER.lobbyWall;
@@ -132,6 +143,7 @@ function buildShell() {
 }
 // One band of one wall: a solid band, or four pieces around a window (with a frame and an
 // invisible pane so nobody falls out of the tower)
+const windows = [];   // every window opening, for the light beams and neon rings (decor.js)
 function towerBand(wall, y0, h, win, material) {
     // wall 0: north (+z), 1: south (-z), 2: east (+x), 3: west (-x); along = the axis the wall runs on
     const n = [[0, 1], [0, -1], [1, 0], [-1, 0]][wall];
@@ -147,6 +159,7 @@ function towerBand(wall, y0, h, win, material) {
     };
     if (!win) { put(-L / 2, L / 2, y0, y0 + h); return; }
     const wy0 = y0 + (h - win.h) / 2, wy1 = wy0 + win.h, w0 = win.c - win.w / 2, w1 = win.c + win.w / 2;
+    windows.push({ wall, n, a0: w0, a1: w1, y0: wy0, y1: wy1 });
     put(-L / 2, w0, y0, y0 + h);
     put(w1, L / 2, y0, y0 + h);
     put(w0, w1, y0, wy0);
@@ -188,6 +201,12 @@ function buildLobby() {
         zoneGroup(-1).add(top);
         const side = new T.Mesh(new T.CylinderGeometry(17, 17.6, 1.5, 64, 1, true), new T.MeshStandardMaterial({ color: 0xe8c4f2, roughness: 0.4 }));
         side.position.set(0, 0.75, 0); zoneGroup(-1).add(side);
+        // a glowing ring around the dais that slowly shifts colour
+        const ringMat = new T.MeshBasicMaterial({ color: 0xff7ad8, toneMapped: false });
+        const dr = new T.Mesh(new T.TorusGeometry(17.35, 0.22, 8, 96), ringMat);
+        dr.rotation.x = Math.PI / 2; dr.position.y = 1.5;
+        zoneGroup(-1).add(dr);
+        tickers.push((dt, t) => { if (dr.parent.visible) ringMat.color.setHSL((0.88 + t * 0.03) % 1, 0.9, 0.62).multiplyScalar(2.2); });
         solids.push({ shape: 'cyl', cx: 0, cz: 0, r: 17, min: new V3(-17, 0, -17), max: new V3(17, 1.5, 17), zone: -1, mat: 'tile' });
     }
     // Red carpet to the VIP door
@@ -202,6 +221,16 @@ function buildLobby() {
     // Title on the east wall above the gear pads
     const title = textPlane([{ t: 'ASMR TOWER', g: ['#ffffff', '#ffd8f8'], s: '#7a2ad8', px: 120, w: 700 }], 54, 1024, new V3(H - 0.3, 26, -2), new V3(0, 26, -2), zoneGroup(-1));
     title.renderOrder = 2;
+    // the title glows and slowly shifts colour, like a neon sign
+    const titleTint = new T.Color();
+    tickers.push((dt, t) => {
+        if (!title.parent.visible) return;
+        titleTint.setHSL((0.85 + Math.sin(t * 0.25) * 0.08) % 1, 0.55, 0.85).multiplyScalar(1.75 + Math.sin(t * 2.2) * 0.25);
+        title.material.color.copy(titleTint);
+    });
+    // pink neon skirting along the bottom of the lobby walls (gap at the VIP door)
+    const skirt = neon(0xff7ad8, 2.2);
+    for (const [x, z, sx, sz] of [[0, H - 0.35, H * 2, 0.3], [H - 0.35, 0, 0.3, H * 2], [-H + 0.35, 0, 0.3, H * 2], [-(H / 2 + 4), -H + 0.35, H - 8, 0.3], [H / 2 + 4, -H + 0.35, H - 8, 0.3]]) batchBox(skirt, x, 1.35, z, sx, 0.3, sz, { zone: -1, tile: 4 });
     textPlane([{ t: 'satisfying slime · squishies · keyboard clicks', c: '#ffffff', s: '#7a2ad8', px: 46 }], 46, 1024, new V3(H - 0.3, 19.5, -2), new V3(0, 19.5, -2), zoneGroup(-1));
     // START sign by the first jelly step
     const start = billboard([{ t: 'START ▶', g: ['#ffffff', '#c8ffb8'], s: '#1a7a2a', px: 76 }, { t: 'climb the jelly stairs!', c: '#ffffff', s: '#1a7a2a', px: 36 }], 12, 512, new V3(-44, 8.5, -50), zoneGroup(-1));
@@ -470,6 +499,7 @@ export const spinners = [];
 export const sweepers = [];
 export const bouncers = [];
 export const popits = [];
+const underglows = [];
 export const cpPads = [];
 let coinMesh = null;
 export const coinState = { collected: new Set() };
@@ -487,6 +517,10 @@ function buildCourse() {
                 batchBox(GREEN(), e.x, e.top - 4, e.z, e.s - 5, 2, e.s - 5, { zone, tile: 16 });
                 solidBox(e.x, e.top - 1.5, e.z, e.s, 3, e.s, { zone, mat: 'block' });
                 if (e.rainbow) jellyBox(e.x, e.top + 0.3, e.z, e.s - 1, 0.6, e.s - 1, 'rainbow:3', zone);
+                // glowing trim around the top edge, in the stage's colour
+                const nm = neon(STAGES[zone].bar, 2.3), hs = e.s / 2;
+                for (const [dx, dz, sx, sz] of [[0, -hs, e.s + 0.3, 0.3], [0, hs, e.s + 0.3, 0.3], [-hs, 0, 0.3, e.s], [hs, 0, 0.3, e.s]]) batchBox(nm, e.x + dx, e.top - 0.12, e.z + dz, sx, 0.3, sz, { zone, tile: 4 });
+                for (const [dx, dz, sx, sz] of [[0, -hs + 2.5, e.s - 5.2, 0.25], [0, hs - 2.5, e.s - 5.2, 0.25], [-hs + 2.5, 0, 0.25, e.s - 5.2], [hs - 2.5, 0, 0.25, e.s - 5.2]]) batchBox(nm, e.x + dx, e.top - 3.05, e.z + dz, sx, 0.25, sz, { zone, tile: 4 });
                 break;
             }
             case 'jelly': {
@@ -508,6 +542,8 @@ function buildCourse() {
                 keyGrid(zone, KEY_LOOK(e.pal), e.x, e.z, e.sx, e.sz, e.top, rnd, null, { letters: 'ABC' });
                 batchBox(GREEN(), e.x, e.top - 2.4, e.z, e.sx + 0.8, 1.6, e.sz + 0.8, { zone, tile: 16 });
                 solidBox(e.x, e.top - 1.6, e.z, e.sx, 3.2, e.sz, { zone, mat: 'keys', keys: true });
+                // RGB-keyboard underglow around the base
+                underglows.push({ x: e.x, y: e.top - 3.3, z: e.z, sx: e.sx + 1.1, sz: e.sz + 1.1, zone });
                 break;
             }
             case 'dome': {
@@ -568,6 +604,23 @@ function buildCourse() {
             movers.push(s);
         });
         keys.done();
+    }
+    // Keyboard underglow: one mesh for every keyboard, cycling through the rainbow like an RGB board
+    if (underglows.length) {
+        const geos = [];
+        for (const u of underglows) {
+            for (const [dx, dz, sx, sz] of [[0, -u.sz / 2, u.sx, 0.3], [0, u.sz / 2, u.sx, 0.3], [-u.sx / 2, 0, 0.3, u.sz], [u.sx / 2, 0, 0.3, u.sz]]) {
+                const g = new T.BoxGeometry(sx, 0.32, sz);
+                g.translate(u.x + dx, u.y, u.z + dz);
+                g.deleteAttribute('uv');
+                geos.push(g);
+            }
+        }
+        const rgb = new T.MeshBasicMaterial({ color: 0xff3fd8, toneMapped: false });
+        const glow = new T.Mesh(mergeGeometries(geos), rgb);
+        glow.frustumCulled = false;
+        zoneGroup(-2).add(glow);
+        tickers.push((dt, t) => rgb.color.setHSL((t * 0.08) % 1, 1, 0.6).multiplyScalar(2.3));
     }
     // Coins: one instanced mesh, spinning
     const cg = new T.CylinderGeometry(1.1, 1.1, 0.3, 28);
@@ -644,7 +697,7 @@ function buildPopit(e, moverGroup) {
     baseMesh.receiveShadow = true; baseMesh.castShadow = true;
     group.add(baseMesh);
     const nx = Math.max(1, Math.round(e.sx / 2)), nz = Math.max(1, Math.round(e.sz / 2));
-    const inst = new T.InstancedMesh(bubbleGeo, popitMaterial(), nx * nz);
+    const inst = new T.InstancedMesh(bubbleGeo, popitBubbleMaterial(), nx * nz);
     const bubbles = [];
     for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
         const lx = -e.sx / 2 + (i + 0.5) * (e.sx / nx), lz = -e.sz / 2 + (j + 0.5) * (e.sz / nz);
@@ -763,9 +816,42 @@ function buildCheckpoint(e) {
     const red = mat(0xff2a3a, { rough: 0.35, emissive: 0xff1a2a, ei: 0.45 });
     for (const [dx, dz, sx, sz] of [[0, -4.1, 9, 1.2], [0, 4.1, 9, 1.2], [-4.1, 0, 1.2, 7], [4.1, 0, 1.2, 7]]) batchBox(red, e.x + dx, e.y + 0.12, e.z + dz, sx, 0.25, sz, { zone, tile: 4 });
     solidBox(e.x, e.y + 0.1, e.z, 7, 0.6, 7, { zone, mat: 'jelly' });
-    const label = billboard([{ t: 'Stage ' + (e.i + 1), c: '#ffffff', s: '#1a5a1a', px: 60 }], 6, 512, new V3(e.x, e.y + 9, e.z), zoneGroup(zone));
+    const label = billboard([{ t: 'Stage ' + (e.i + 1), c: '#ffffff', s: '#1a5a1a', px: 60 }], 6, 512, new V3(e.x, e.y + 10.5, e.z), zoneGroup(zone));
     label.material.opacity = 0.9;
-    cpPads[e.i] = { pad, lit: false, label };
+    // a pulsing neon ring around the pad
+    const ringMat = new T.MeshBasicMaterial({ color: 0xff3a4a, toneMapped: false });
+    const ring = new T.Mesh(new T.TorusGeometry(5.3, 0.16, 8, 64), ringMat);
+    ring.rotation.x = Math.PI / 2; ring.position.set(e.x, e.y + 0.35, e.z);
+    zoneGroup(zone).add(ring);
+    // a flag on a pole that waves in the wind: red until you reach it, then green
+    const flagGeo = new T.PlaneGeometry(3.2, 2, 14, 6);
+    flagGeo.translate(1.6, 0, 0);
+    const flagMat = new T.MeshStandardMaterial({ color: 0xff3a4a, side: T.DoubleSide, roughness: 0.6, emissive: 0x7a0a14, emissiveIntensity: 0.4 });
+    const flag = new T.Mesh(flagGeo, flagMat);
+    flag.castShadow = true;
+    const fx = e.x - 2.9 * Math.sign(e.x), fz = e.z - 2.9 * Math.sign(e.z);
+    const pole = new T.Mesh(new T.CylinderGeometry(0.12, 0.14, 8, 10), mat(0xf4f4ff, { rough: 0.3, metal: 0.4 }));
+    pole.position.set(fx, e.y + 4.4, fz); zoneGroup(zone).add(pole);
+    const knob = new T.Mesh(new T.SphereGeometry(0.28, 12, 10), mat(0xffd028, { rough: 0.3, metal: 0.6 }));
+    knob.position.set(fx, e.y + 8.5, fz); zoneGroup(zone).add(knob);
+    flag.position.set(fx, e.y + 7.1, fz);
+    flag.rotation.y = Math.atan2(-Math.sign(e.z), Math.sign(e.x)) + Math.PI;
+    zoneGroup(zone).add(flag);
+    const base = Float32Array.from(flagGeo.attributes.position.array);
+    cpPads[e.i] = { pad, lit: false, label, ring, flag, flagMat };
+    tickers.push((dt, t) => {
+        if (!flag.parent.visible) return;
+        const p = flagGeo.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+            const x = base[i * 3], k = x / 3.2;
+            p.array[i * 3 + 2] = Math.sin(x * 1.9 - t * 5 + e.i) * 0.32 * k + Math.sin(base[i * 3 + 1] * 2 + t * 3) * 0.06 * k;
+        }
+        p.needsUpdate = true;
+        flagGeo.computeVertexNormals();
+        const pulse = 1.6 + Math.sin(t * 3 + e.i) * 0.6;
+        ringMat.color.set(cpPads[e.i].lit ? 0x46ff5a : 0xff3a4a).multiplyScalar(pulse);
+        ring.scale.setScalar(1 + Math.sin(t * 3 + e.i) * 0.03);
+    });
     triggers.push({ min: new V3(e.x - 3.6, e.y, e.z - 3.6), max: new V3(e.x + 3.6, e.y + 6, e.z + 3.6), zone, enter: () => actions.checkpoint(e.i) });
 }
 export function lightCheckpoint(i, on) {
@@ -776,6 +862,8 @@ export function lightCheckpoint(i, on) {
     c.pad.material.emissive = new T.Color(on ? 0x2aa83a : 0x000000);
     c.pad.material.emissiveIntensity = on ? 0.35 : 0;
     c.pad.material.needsUpdate = true;
+    c.flagMat.color.set(on ? 0x46e85a : 0xff3a4a);
+    c.flagMat.emissive.set(on ? 0x0a6a1a : 0x7a0a14);
 }
 
 function buildSummit(e) {
@@ -915,6 +1003,7 @@ export function buildWorld() {
     buildShell();
     buildLobby();
     buildCourse();
+    buildDecor({ zoneGroup, windows, H, TOP });
     flushKeys((z) => zoneGroup(z));
     flushBatches((z) => zoneGroup(z));
 }

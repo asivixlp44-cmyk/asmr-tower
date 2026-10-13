@@ -43,6 +43,35 @@ export const greenWallTex = () => once('gw', () => checker(0x4cf04a, 0x36d838, '
 export const purpleWallTex = () => once('pw', () => checker(0xd2a6f6, 0xb886ea, 'rgba(90,40,140,0.85)', 5));
 export const greenFloorTex = () => once('gf', () => checker(0x5aff52, 0x46ec44, 'rgba(20,110,20,0.7)', 9));
 
+// Bevelled tiles as a normal map: every tile is a slightly raised square with soft rounded edges,
+// so walls and floors catch the light like real glazed tiles instead of flat colour
+function bevelNormal(N, cell, bevel, depth) {
+    const h = new Float32Array(N * N);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+        const lx = (x % cell) + 0.5, ly = (y % cell) + 0.5;
+        const d = Math.min(lx, cell - lx, ly, cell - ly);
+        h[y * N + x] = d >= bevel ? 1 : Math.pow(Math.max(0, d) / bevel, 0.65);
+    }
+    const c = canvas(N), x = c.getContext('2d'), img = x.createImageData(N, N);
+    const at = (px, py) => h[((py + N) % N) * N + ((px + N) % N)];
+    for (let y = 0; y < N; y++) for (let x2 = 0; x2 < N; x2++) {
+        const dx = (at(x2 + 1, y) - at(x2 - 1, y)) * depth, dy = (at(x2, y + 1) - at(x2, y - 1)) * depth;
+        const l = Math.hypot(dx, dy, 1), i = (y * N + x2) * 4;
+        img.data[i] = (-dx / l * 0.5 + 0.5) * 255;
+        img.data[i + 1] = (dy / l * 0.5 + 0.5) * 255;
+        img.data[i + 2] = (1 / l * 0.5 + 0.5) * 255;
+        img.data[i + 3] = 255;
+    }
+    x.putImageData(img, 0, 0);
+    const t = new T.CanvasTexture(c);
+    t.colorSpace = T.NoColorSpace;
+    t.wrapS = t.wrapT = T.RepeatWrapping;
+    t.anisotropy = Math.min(8, maxAniso());
+    return t;
+}
+export const tileNormal64 = () => once('tn64', () => bevelNormal(512, 64, 7, 1.6));
+export const tileNormal128 = () => once('tn128', () => bevelNormal(512, 128, 9, 1.6));
+
 // Lobby floor: big pale lilac tiles with soft grout and a little variation
 export const lilacFloorTex = () => once('lf', () => {
     const N = 512, c = canvas(N), x = c.getContext('2d'), rnd = seeded(11);
@@ -207,10 +236,16 @@ export const softTex = () => once('soft', () => {
 export function wallMaterial(kind) {
     return once('wallmat|' + kind, () => {
         const map = kind === 'purple' ? purpleWallTex() : kind === 'floor' ? greenFloorTex() : greenWallTex();
-        return new T.MeshStandardMaterial({ map, roughness: kind === 'floor' ? 0.5 : 0.62, metalness: 0, envMapIntensity: kind === 'floor' ? 0.95 : 0.6 });
+        return new T.MeshStandardMaterial({
+            map, normalMap: tileNormal64(), normalScale: new T.Vector2(0.85, 0.85),
+            roughness: kind === 'floor' ? 0.5 : 0.55, metalness: 0, envMapIntensity: kind === 'floor' ? 0.9 : 0.7,
+        });
     });
 }
-export const lilacMaterial = () => once('lilacmat', () => new T.MeshStandardMaterial({ map: lilacFloorTex(), roughness: 0.52, metalness: 0, envMapIntensity: 0.85 }));
+export const lilacMaterial = () => once('lilacmat', () => new T.MeshStandardMaterial({ map: lilacFloorTex(), normalMap: tileNormal128(), normalScale: new T.Vector2(0.8, 0.8), roughness: 0.42, metalness: 0, envMapIntensity: 0.95 }));
+
+// One clock for every animated material (jelly wobble, bubbles, slime)
+export const matTime = { value: 0 };
 export const hazardMaterial = () => once('hzmat', () => new T.MeshStandardMaterial({ map: hazardTex(), roughness: 0.5 }));
 export const trussMaterial = () => once('trussmat', () => new T.MeshStandardMaterial({ map: trussTex(), alphaTest: 0.45, side: T.DoubleSide, roughness: 0.45 }));
 export const butterMaterial = () => once('buttermat', () => new T.MeshPhysicalMaterial({ map: butterTopTex(), roughness: 0.28, clearcoat: 0.7, clearcoatRoughness: 0.25, sheen: 0.5, sheenColor: new T.Color(0xfff4c8), envMapIntensity: 1.2 }));
@@ -234,12 +269,84 @@ function addRim(m, rim, power, strength) {
     };
     m.customProgramCacheKey = () => 'rim' + power + strength;
 }
+// Jelly wobbles: it breathes gently all the time, and every landing / footstep on it sends a
+// jiggle through the surface around the impact (up to 8 at once, shared by every jelly piece).
+export const jellyHits = Array.from({ length: 8 }, () => new T.Vector4(0, -9999, 0, -99));
+const jellyHitK = { value: new Float32Array(8) };
+let jellyHitN = 0;
+export function jellyHit(x, y, z, k) {
+    jellyHits[jellyHitN].set(x, y, z, matTime.value);
+    jellyHitK.value[jellyHitN] = k ?? 1;
+    jellyHitN = (jellyHitN + 1) % 8;
+}
+const JIGGLE = `
+    {
+        vec3 jw = (modelMatrix * vec4(position, 1.0)).xyz;
+        float top = smoothstep(-0.3, 0.9, normal.y);
+        float jig = 0.0; vec2 bulge = vec2(0.0);
+        for (int i = 0; i < 8; i++) {
+            vec4 h = uHits[i];
+            float age = uTime - h.w;
+            if (age < 0.0 || age > 2.2) continue;
+            vec3 dd = jw - h.xyz;
+            float fall = uHitK[i] * exp(-dot(dd.xz, dd.xz) * 0.05 - dd.y * dd.y * 0.06) * exp(-age * 3.2);
+            float s = sin(age * 25.0);
+            jig += fall * s;
+            bulge += normalize(dd.xz + vec2(0.0001)) * fall * s;
+        }
+        transformed.y += jig * 0.42 * top - jig * 0.08;
+        transformed.xz -= bulge * 0.2 * (1.0 - abs(normal.y));
+        transformed.y += sin(uTime * 2.1 + jw.x * 0.33 + jw.z * 0.27) * 0.05 * max(normal.y, 0.0);
+    }`;
 export const jellyMaterial = () => once('jellymat', () => {
     const m = new T.MeshPhysicalMaterial({
-        color: 0xffffff, vertexColors: true, roughness: 0.1, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05,
-        transparent: true, opacity: 0.8, envMapIntensity: 1.7, emissive: 0x000000,
+        color: 0xffffff, vertexColors: true, roughness: 0.08, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.04,
+        transparent: true, opacity: 0.86, envMapIntensity: 1.45, emissive: 0x000000,
+        sheen: 0.4, sheenColor: new T.Color(0xeaffea),
     });
-    addRim(m, 0xffffff, 2.4, 0.6);
+    m.onBeforeCompile = (sh) => {
+        sh.uniforms.uRim = { value: new T.Color(0xffffff) };
+        sh.uniforms.uTime = matTime;
+        sh.uniforms.uHits = { value: jellyHits };
+        sh.uniforms.uHitK = jellyHitK;
+        sh.vertexShader = sh.vertexShader
+            .replace('#include <common>', '#include <common>\nuniform float uTime; uniform vec4 uHits[8]; uniform float uHitK[8];')
+            .replace('#include <begin_vertex>', '#include <begin_vertex>' + JIGGLE);
+        sh.fragmentShader = sh.fragmentShader
+            .replace('#include <common>', '#include <common>\nuniform vec3 uRim;')
+            .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+                float fres = pow(1.0 - clamp(dot(normalize(vNormal), normalize(vViewPosition)), 0.0, 1.0), 2.4);
+                totalEmissiveRadiance += uRim * fres * 0.6 * diffuseColor.rgb + diffuseColor.rgb * 0.16;
+                diffuseColor.a = mix(diffuseColor.a, 1.0, fres * 0.6);`);
+    };
+    m.customProgramCacheKey = () => 'jelly-jiggle';
+    return m;
+});
+
+// Soap bubbles: clear, iridescent, brightest at the rim
+export const bubbleMaterial = () => once('bubblemat', () => {
+    const m = new T.MeshPhysicalMaterial({
+        color: 0xffffff, roughness: 0.02, metalness: 0, transparent: true, opacity: 0.35, depthWrite: false,
+        iridescence: 1, iridescenceIOR: 1.33, iridescenceThicknessRange: [250, 900], clearcoat: 1, envMapIntensity: 2.6,
+    });
+    m.onBeforeCompile = (sh) => {
+        sh.uniforms.uTime = matTime;
+        sh.vertexShader = sh.vertexShader
+            .replace('#include <common>', '#include <common>\nuniform float uTime; attribute vec4 aB;')
+            .replace('#include <begin_vertex>', `#include <begin_vertex>
+                float spd = 1.6 + fract(aB.z * 7.31) * 2.6;
+                float yy = mod(aB.z * 337.0 + uTime * spd, 345.0) - 5.0;
+                vec3 off = vec3(aB.x + sin(uTime * 0.55 + aB.z * 20.0) * 2.4, yy, aB.y + cos(uTime * 0.47 + aB.z * 13.0) * 2.4);
+                float wob = 1.0 + sin(uTime * 3.0 + aB.z * 9.0) * 0.06;
+                transformed = transformed * aB.w * vec3(wob, 2.0 - wob, wob) + off;`)
+            .replace('#include <beginnormal_vertex>', '#include <beginnormal_vertex>');
+        sh.fragmentShader = sh.fragmentShader
+            .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+                float bf = pow(1.0 - clamp(abs(dot(normalize(vNormal), normalize(vViewPosition))), 0.0, 1.0), 2.0);
+                diffuseColor.a = mix(0.05, 0.8, bf);
+                totalEmissiveRadiance += vec3(0.25, 0.22, 0.32) * bf;`);
+    };
+    m.customProgramCacheKey = () => 'bubble';
     return m;
 });
 export const domeMaterial = () => once('domemat', () => {
@@ -256,6 +363,8 @@ export const vanishMaterial = (color) => {
     return m;
 };
 export const popitMaterial = () => once('popitmat', () => new T.MeshPhysicalMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.34, clearcoat: 0.5, clearcoatRoughness: 0.4, sheen: 0.5, sheenColor: new T.Color(0xffffff) }));
+// the bubbles take their colour per instance (no vertex colours, or they'd render black)
+export const popitBubbleMaterial = () => once('popitbub', () => new T.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.3, clearcoat: 0.7, clearcoatRoughness: 0.3, sheen: 0.5, sheenColor: new T.Color(0xffffff) }));
 export const mochiMaterial = () => once('mochimat', () => new T.MeshPhysicalMaterial({ color: 0xfff0f6, roughness: 0.6, sheen: 1, sheenRoughness: 0.5, sheenColor: new T.Color(0xffc8e0), emissive: 0xff9ac8, emissiveIntensity: 0.06 }));
 export const coinMaterial = () => once('coinmat', () => new T.MeshStandardMaterial({ map: coinTex(), color: 0xffffff, metalness: 0.55, roughness: 0.25, emissive: 0x6a4800, emissiveIntensity: 0.45 }));
 export const coinRimMaterial = () => once('coinrim', () => new T.MeshStandardMaterial({ color: 0xffbf1a, metalness: 0.8, roughness: 0.25, emissive: 0x5a3800, emissiveIntensity: 0.4 }));
@@ -265,20 +374,37 @@ export const coinRimMaterial = () => once('coinrim', () => new T.MeshStandardMat
 // players standing on slime. Heights are computed in the vertex shader, normals by finite
 // differences, so the light glints off the moving bumps.
 export const slimeFeet = Array.from({ length: 8 }, () => new T.Vector4(0, 0, 0, 99));
-const slimeTime = { value: 0 };
-export function tickSlime(t) { slimeTime.value = t; }
-export const slimeMaterial = () => once('slimemat', () => {
-    const m = new T.MeshPhysicalMaterial({
-        color: 0x9cf21a, roughness: 0.14, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08,
-        emissive: 0x3a7a00, emissiveIntensity: 0.32, envMapIntensity: 1.6, sheen: 0.6, sheenColor: new T.Color(0xeaff9a),
+const slimeTime = matTime;
+export function tickSlime(t) { matTime.value = t; }
+export const slimeMaterial = () => gelMaterial('slime', {
+    color: 0x9cf21a, emissive: 0x3a7a00, emissiveIntensity: 0.32, amp: 1, hi: '0.86, 1.0, 0.45',
+});
+// The lobby's green floor: a glossy gel with the green checker showing through, softly rippling
+// and denting under your feet (same shader as the slime, calmer waves)
+export const floorGelMaterial = () => gelMaterial('floorgel', {
+    color: 0xffffff, map: greenFloorTex(), repeat: 8, emissive: 0x0a4a10, emissiveIntensity: 0.25, amp: 0.45, hi: '0.75, 1.0, 0.7', rough: 0.2,
+});
+function gelMaterial(key, o) {
+    return once('gel|' + key, () => {
+        let map = null;
+        if (o.map) { map = o.map.clone(); map.repeat.set(o.repeat || 1, o.repeat || 1); map.needsUpdate = true; }
+        const m = new T.MeshPhysicalMaterial({
+            color: o.color, map, roughness: o.rough ?? 0.14, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.08,
+            emissive: o.emissive, emissiveIntensity: o.emissiveIntensity, envMapIntensity: 1.5, sheen: 0.6, sheenColor: new T.Color(0xeaff9a),
+        });
+        m.onBeforeCompile = (sh) => gelShader(sh, o);
+        m.customProgramCacheKey = () => 'gel-' + key;
+        return m;
     });
-    m.onBeforeCompile = (sh) => {
+}
+function gelShader(sh, o) {
+    {
         sh.uniforms.uTime = slimeTime;
         sh.uniforms.uFeet = { value: slimeFeet };
         const H = `uniform float uTime; uniform vec4 uFeet[8]; varying float vSlimeH;
             float slimeH(vec2 p) {
-                float h = 0.16 * sin(p.x * 0.55 + uTime * 1.1) * sin(p.y * 0.48 - uTime * 0.9)
-                        + 0.1 * sin(p.x * 1.3 - p.y * 0.9 + uTime * 1.7) + 0.06 * sin(p.y * 2.1 + uTime * 2.3 + p.x * 0.4);
+                float h = (0.16 * sin(p.x * 0.55 + uTime * 1.1) * sin(p.y * 0.48 - uTime * 0.9)
+                        + 0.1 * sin(p.x * 1.3 - p.y * 0.9 + uTime * 1.7) + 0.06 * sin(p.y * 2.1 + uTime * 2.3 + p.x * 0.4)) * ${(o.amp ?? 1).toFixed(2)};
                 for (int i = 0; i < 8; i++) {
                     vec4 f = uFeet[i];
                     if (f.z <= 0.0) continue;
@@ -301,13 +427,17 @@ export const slimeMaterial = () => once('slimemat', () => {
             .replace('#include <begin_vertex>', '#include <begin_vertex>\ntransformed.y += sh0;');
         sh.fragmentShader = sh.fragmentShader
             .replace('#include <common>', '#include <common>\nvarying float vSlimeH;')
-            .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb * 0.82, vec3(0.86, 1.0, 0.45), smoothstep(-0.1, 0.32, vSlimeH) * 0.55);');
-    };
-    m.customProgramCacheKey = () => 'slime';
+            .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb = mix(diffuseColor.rgb * 0.82, vec3(' + o.hi + '), smoothstep(-0.1, 0.32, vSlimeH) * 0.55);');
+    }
+}
+
+// Glowing neon (above 1.0, so the bloom picks it up); cached per colour and strength
+export const neon = (color, boost) => once('neon|' + color + '|' + (boost || 2.2), () => { const m = new T.MeshBasicMaterial({ color }); m.color.multiplyScalar(boost || 2.2); return m; });
+// Neon with per-vertex colours (rings, strips, pillars), boosted in the shader
+export const neonVC = (boost) => once('neonvc|' + boost, () => {
+    const m = new T.MeshBasicMaterial({ vertexColors: true });
+    m.color.setScalar(boost || 2.2);
     return m;
 });
-
-// Animated trampoline slime (jiggles when someone bounces): a small disc using the slime look
-export const neon = (color, boost) => { const m = new T.MeshBasicMaterial({ color }); m.color.multiplyScalar(boost || 2.2); return m; };
 
 export function anisoAll(tex) { tex.anisotropy = Math.min(8, maxAniso()); return tex; }
