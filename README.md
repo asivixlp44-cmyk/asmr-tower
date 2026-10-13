@@ -4,7 +4,7 @@ A multiplayer ASMR tower obby for the browser, built with **Three.js** and **Col
 
 **There are no in-app purchases.** Everything is bought with **Wins**, earned by climbing.
 
-It shares its engine with the other Legion games (server, Bloxity login and avatars, profiles, Bux webhook, effects). The tower, course, physics shapes, ASMR sounds, pets, gear and HUD are new.
+It shares its engine with the other Legion games (server, Bloxity login and avatars, profiles, effects). The tower, course, physics shapes, ASMR sounds, pets, gear and HUD are new.
 
 ## Project layout
 
