@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ASMR Tower Setup</title>
+<style>
+:root { --bg: #f4f6fb; --card: #ffffff; --ink: #1b1d2a; --muted: #5d6478; --line: #e1e5ef; --accent: #2a7cff; --ok: #1e9e4a; --chip: #eef3ff; --off: #9aa0b0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #12141c; --card: #1b1e29; --ink: #eef0f7; --muted: #a2a9bd; --line: #2c3142; --accent: #5aa0ff; --ok: #4cd37c; --chip: #23293a; --off: #6c7386; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1060px; margin: 0 auto; padding: 28px 16px 60px; }
+h1 { font-size: 28px; margin: 0 0 4px; }
+h2 { font-size: 19px; margin: 34px 0 10px; }
+h2 small { font-size: 13px; color: var(--muted); font-weight: 500; }
+p.sub { color: var(--muted); margin: 0 0 8px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 6px 16px; }
+.field { display: grid; grid-template-columns: 210px 1fr auto; gap: 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.field:last-child { border-bottom: none; }
+.label { color: var(--muted); font-weight: 600; padding-top: 2px; }
+.val { white-space: pre-wrap; word-break: break-word; }
+.mono, code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13.5px; }
+button.copy { border: 1px solid var(--line); background: var(--chip); color: var(--ink); border-radius: 8px; padding: 4px 10px; font: 600 13px system-ui, sans-serif; cursor: pointer; }
+button.copy:hover { border-color: var(--accent); }
+button.copy.done { color: var(--ok); border-color: var(--ok); }
+.tablewrap { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 12px; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-size: 13px; font-weight: 600; background: var(--chip); }
+tr:last-child td { border-bottom: none; }
+td.on { color: var(--ok); font-weight: 700; white-space: nowrap; }
+td.off { color: var(--off); white-space: nowrap; }
+td.why { color: var(--muted); }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 0; }
+.tag { border: 1px solid var(--line); background: var(--chip); border-radius: 7px; padding: 2px 9px; font-size: 13px; font-weight: 600; }
+ol.steps { padding-left: 20px; margin: 0; } ol.steps li { margin: 6px 0; }
+@media (max-width: 640px) { .field { grid-template-columns: 1fr auto; } .label { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<main>
+    <h1>ASMR Tower: Create New Game</h1>
+    <p class="sub">Every field of the bloxity.io Manage Games &rarr; <b>Create New Game</b> form, top to bottom, then the in-app purchases (the SKUs must match exactly). Click Copy to copy a value.</p>
+    <h2>Basic Info</h2>
+    <div class="card">
+    <div class="field"><div class="label">Slug *</div><div class="val mono">asmr-tower</div><button class="copy" data-v="asmr-tower">Copy</button></div>
+    <div class="field"><div class="label">Name *</div><div class="val">ASMR Tower</div><button class="copy" data-v="ASMR Tower">Copy</button></div>
+    <div class="field"><div class="label">SEO Name (optional)</div><div class="val">ASMR Tower - Relaxing Slime &amp; Squishy Obby | Free 3D Tower Obby</div><button class="copy" data-v="ASMR Tower - Relaxing Slime &amp; Squishy Obby | Free 3D Tower Obby">Copy</button></div>
+    <div class="field"><div class="label">Developer</div><div class="val">&#9745; Show developer (your choice)</div><span></span></div>
+    <div class="field"><div class="label">Game Source *</div><div class="val">Choose <b>External URL</b> (not Upload ZIP): the game is hosted by Legion.</div><span></span></div>
+    <div class="field"><div class="label">Game URL</div><div class="val mono">https://asmr-tower.play.bloxity.io/</div><button class="copy" data-v="https://asmr-tower.play.bloxity.io/">Copy</button></div>
+    <div class="field"><div class="label">Raw URL (optional)</div><div class="val mono">https://asmr-tower.play.bloxity.io/</div><button class="copy" data-v="https://asmr-tower.play.bloxity.io/">Copy</button></div>
+    <div class="field"><div class="label">CG URL (optional)</div><div class="val"><span style="color:var(--off)">Leave empty</span></div><span></span></div>
+    <div class="field"><div class="label">Additional Game Domains</div><div class="val mono">asmr-tower.play.bloxity.io
+asmr-tower.dev.play.bloxity.io
+asmr-tower.host.bloxity.io</div><button class="copy" data-v="asmr-tower.play.bloxity.io
+asmr-tower.dev.play.bloxity.io
+asmr-tower.host.bloxity.io">Copy</button></div>
+    <div class="field"><div class="label">Short Description</div><div class="val">A relaxing tower obby full of satisfying slime, squishies and keyboard clicks. Climb 12 ASMR stages to the top!</div><button class="copy" data-v="A relaxing tower obby full of satisfying slime, squishies and keyboard clicks. Climb 12 ASMR stages to the top!">Copy</button></div>
+    <div class="field"><div class="label">Description</div><div class="val">ASMR Tower is a relaxing tower obby filled with satisfying slime, squishy and keyboard click sounds. Climb up the inside of a giant tower: wobbly jelly stairs, clicky keyboard bridges, squishy jelly domes, trusses and lime slime pools, waxed salted-butter blocks, pop-it paths, slime trampolines, sliding bubble wrap, typing keys, melting jelly, spinning mochi and the Rainbow Summit. Every surface has its own satisfying sound. Reach checkpoints for Coins, hatch cute squishy pets that multiply your Coins, collect trails, spin the lucky wheel and race your friends to the top. Grab gear like the Magic Carpet, Jetpack, Grappling Hook, coils and the Slap Tool!</div><button class="copy" data-v="ASMR Tower is a relaxing tower obby filled with satisfying slime, squishy and keyboard click sounds. Climb up the inside of a giant tower: wobbly jelly stairs, clicky keyboard bridges, squishy jelly domes, trusses and lime slime pools, waxed salted-butter blocks, pop-it paths, slime trampolines, sliding bubble wrap, typing keys, melting jelly, spinning mochi and the Rainbow Summit. Every surface has its own satisfying sound. Reach checkpoints for Coins, hatch cute squishy pets that multiply your Coins, collect trails, spin the lucky wheel and race your friends to the top. Grab gear like the Magic Carpet, Jetpack, Grappling Hook, coils and the Slap Tool!">Copy</button></div>
+    </div>
+    <h2>Checkboxes</h2>
+    <div class="tablewrap"><table><thead><tr><th>Option</th><th>Set to</th><th>Why</th></tr></thead><tbody>
+        <tr><td>SDK Support</td><td class="on">&#9745; ON</td><td class="why">The game uses the Bloxity SDK (login, avatars, friends, chat, emotes, Bux).</td></tr>
+        <tr><td>LoadingEnd Support</td><td class="on">&#9745; ON</td><td class="why">The game calls loadingEnd() as soon as it has joined a server.</td></tr>
+        <tr><td>Active</td><td class="on">&#9745; ON</td><td class="why">So players can find it.</td></tr>
+        <tr><td>Show Chat</td><td class="on">&#9745; ON</td><td class="why">Chat bubbles appear over players.</td></tr>
+        <tr><td>Show Voice</td><td class="on">&#9745; ON</td><td class="why">Fine for a social game.</td></tr>
+        <tr><td>Mobile Force Landscape</td><td class="on">&#9745; ON</td><td class="why">The joystick, JUMP and the side menus need the width.</td></tr>
+    </tbody></table></div>
+    <div class="card" style="margin-top:12px">
+    <div class="field"><div class="label">Engine</div><div class="val">three.js (only an admin can set this)</div><span></span></div>
+    <div class="field"><div class="label">Page Layout</div><div class="val">Classic</div><span></span></div>
+    </div>
+    <h2>Tags</h2>
+    <div class="card"><div class="tags"><span class="tag">Obby</span><span class="tag">ASMR</span><span class="tag">Tower</span><span class="tag">Parkour</span><span class="tag">Relaxing</span><span class="tag">Satisfying</span><span class="tag">Slime</span><span class="tag">Squishy</span><span class="tag">Pets</span><span class="tag">Multiplayer</span><span class="tag">3D</span><span class="tag">Casual</span><span class="tag">Platformer</span><span class="tag">Roblox-style</span><span class="tag">Kids</span><span class="tag">Social</span><span class="tag">Free</span></div></div>
+    <h2>In-App Purchases <small>(22 items, prices in Bux, editable in the catalog)</small></h2>
+    <div class="tablewrap"><table><thead><tr><th>SKU</th><th>Name</th><th>Price</th><th>Type</th><th>What it gives</th></tr></thead><tbody>
+        <tr><td class="mono">pass_vip <button class="copy" data-v="pass_vip">Copy</button></td><td>VIP <button class="copy" data-v="VIP">Copy</button></td><td>299</td><td>Game pass (one-time)</td><td class="why">VIP trail, VIP title, VIP room, teleport to any stage, +25% Coins</td></tr>
+        <tr><td class="mono">pass_double_coins <button class="copy" data-v="pass_double_coins">Copy</button></td><td>x2 Coins <button class="copy" data-v="x2 Coins">Copy</button></td><td>199</td><td>Game pass (one-time)</td><td class="why">Double Coins forever</td></tr>
+        <tr><td class="mono">pass_speed_coil <button class="copy" data-v="pass_speed_coil">Copy</button></td><td>Speed Coil <button class="copy" data-v="Speed Coil">Copy</button></td><td>99</td><td>Game pass (one-time)</td><td class="why">Run 55% faster</td></tr>
+        <tr><td class="mono">pass_gravity_coil <button class="copy" data-v="pass_gravity_coil">Copy</button></td><td>Gravity Coil <button class="copy" data-v="Gravity Coil">Copy</button></td><td>99</td><td>Game pass (one-time)</td><td class="why">Low gravity: huge floaty jumps</td></tr>
+        <tr><td class="mono">pass_super_coil <button class="copy" data-v="pass_super_coil">Copy</button></td><td>Super Coil <button class="copy" data-v="Super Coil">Copy</button></td><td>199</td><td>Game pass (one-time)</td><td class="why">Jump higher and run faster</td></tr>
+        <tr><td class="mono">pass_grappling_hook <button class="copy" data-v="pass_grappling_hook">Copy</button></td><td>Grappling Hook <button class="copy" data-v="Grappling Hook">Copy</button></td><td>249</td><td>Game pass (one-time)</td><td class="why">Hook, swing, and fly across obstacles</td></tr>
+        <tr><td class="mono">pass_slap_tool <button class="copy" data-v="pass_slap_tool">Copy</button></td><td>Slap Tool <button class="copy" data-v="Slap Tool">Copy</button></td><td>299</td><td>Game pass (one-time)</td><td class="why">Slap other players off the tower</td></tr>
+        <tr><td class="mono">pass_magic_carpet <button class="copy" data-v="pass_magic_carpet">Copy</button></td><td>Magic Carpet <button class="copy" data-v="Magic Carpet">Copy</button></td><td>599</td><td>Game pass (one-time)</td><td class="why">Fly freely</td></tr>
+        <tr><td class="mono">pass_jetpack <button class="copy" data-v="pass_jetpack">Copy</button></td><td>Jetpack <button class="copy" data-v="Jetpack">Copy</button></td><td>299</td><td>Game pass (one-time)</td><td class="why">Fly anywhere while your fuel lasts</td></tr>
+        <tr><td class="mono">starter_pack <button class="copy" data-v="starter_pack">Copy</button></td><td>Starter Pack <button class="copy" data-v="Starter Pack">Copy</button></td><td>99</td><td>Product (repeatable)</td><td class="why">Speed Coil, 500 Coins, 3 Spins and a Pink Slime pet</td></tr>
+        <tr><td class="mono">skip_stage <button class="copy" data-v="skip_stage">Copy</button></td><td>Skip Stage <button class="copy" data-v="Skip Stage">Copy</button></td><td>25</td><td>Product (repeatable)</td><td class="why">Teleport to the next checkpoint</td></tr>
+        <tr><td class="mono">nuke_all <button class="copy" data-v="nuke_all">Copy</button></td><td>Nuke All <button class="copy" data-v="Nuke All">Copy</button></td><td>49</td><td>Product (repeatable)</td><td class="why">Nuke everyone else back to the lobby</td></tr>
+        <tr><td class="mono">coins_1k <button class="copy" data-v="coins_1k">Copy</button></td><td>1,000 Coins <button class="copy" data-v="1,000 Coins">Copy</button></td><td>49</td><td>Product (repeatable)</td><td class="why">+1000 Coins</td></tr>
+        <tr><td class="mono">coins_6k <button class="copy" data-v="coins_6k">Copy</button></td><td>6,000 Coins <button class="copy" data-v="6,000 Coins">Copy</button></td><td>199</td><td>Product (repeatable)</td><td class="why">+6000 Coins</td></tr>
+        <tr><td class="mono">coins_40k <button class="copy" data-v="coins_40k">Copy</button></td><td>40,000 Coins <button class="copy" data-v="40,000 Coins">Copy</button></td><td>799</td><td>Product (repeatable)</td><td class="why">+40000 Coins</td></tr>
+        <tr><td class="mono">spins_5 <button class="copy" data-v="spins_5">Copy</button></td><td>+5 Spins <button class="copy" data-v="+5 Spins">Copy</button></td><td>49</td><td>Product (repeatable)</td><td class="why">+5 Spins</td></tr>
+        <tr><td class="mono">donate_10 <button class="copy" data-v="donate_10">Copy</button></td><td>Donate 10 <button class="copy" data-v="Donate 10">Copy</button></td><td>10</td><td>Product (repeatable)</td><td class="why">Donation (goes on the Donations Leaderboard)</td></tr>
+        <tr><td class="mono">donate_100 <button class="copy" data-v="donate_100">Copy</button></td><td>Donate 100 <button class="copy" data-v="Donate 100">Copy</button></td><td>100</td><td>Product (repeatable)</td><td class="why">Donation (goes on the Donations Leaderboard)</td></tr>
+        <tr><td class="mono">donate_500 <button class="copy" data-v="donate_500">Copy</button></td><td>Donate 500 <button class="copy" data-v="Donate 500">Copy</button></td><td>500</td><td>Product (repeatable)</td><td class="why">Donation (goes on the Donations Leaderboard)</td></tr>
+        <tr><td class="mono">donate_1000 <button class="copy" data-v="donate_1000">Copy</button></td><td>Donate 1,000 <button class="copy" data-v="Donate 1,000">Copy</button></td><td>1000</td><td>Product (repeatable)</td><td class="why">Donation (goes on the Donations Leaderboard)</td></tr>
+        <tr><td class="mono">donate_5000 <button class="copy" data-v="donate_5000">Copy</button></td><td>Donate 5,000 <button class="copy" data-v="Donate 5,000">Copy</button></td><td>5000</td><td>Product (repeatable)</td><td class="why">Donation (goes on the Donations Leaderboard)</td></tr>
+        <tr><td class="mono">donate_10000 <button class="copy" data-v="donate_10000">Copy</button></td><td>Donate 10,000 <button class="copy" data-v="Donate 10,000">Copy</button></td><td>10000</td><td>Product (repeatable)</td><td class="why">Donation (goes on the Donations Leaderboard)</td></tr>
+    </tbody></table></div>
+    <div class="card" style="margin-top:12px">
+    <div class="field"><div class="label">Default Webhook URL</div><div class="val mono">https://asmr-tower.host.bloxity.io/api/legion-webhook</div><button class="copy" data-v="https://asmr-tower.host.bloxity.io/api/legion-webhook">Copy</button></div>
+    <div class="field"><div class="label">Webhook secret</div><div class="val">Use the same value as <code>LEGION_WEBHOOK_SECRET</code> on the server. Without it the server runs in demo mode and every purchase is free.</div><span></span></div>
+    </div>
+    <h2>Release</h2>
+    <div class="card">
+    <div class="field"><div class="label">Release date &amp; time</div><div class="val">Click <b>Clear</b> so it publishes as soon as it is Active.</div><span></span></div>
+    </div>
+    <p class="sub" style="margin-top:10px">Then click <b>Create Game</b>.</p>
+    <h2>Hosting steps</h2>
+    <div class="card" style="padding:14px 16px"><ol class="steps">
+        <li>hosting.bloxity.io: create the app <code>asmr-tower</code> and copy its deploy token.</li>
+        <li>GitHub: an empty public repo <code>asivixlp44-cmyk/asmr-tower</code> with the secret <code>LEGION_DEPLOY_TOKEN</code>, then push <code>main</code> (the workflow builds and deploys).</li>
+        <li>Check <code>https://asmr-tower.host.bloxity.io/health</code> and play at <code>https://asmr-tower.play.bloxity.io</code>.</li>
+        <li>Create the game in Manage Games with the values above (slug exactly <code>asmr-tower</code>) and add the IAPs.</li>
+        <li>Set <code>LEGION_WEBHOOK_SECRET</code> on the server so purchases cost real Bux.</li>
+    </ol></div>
+</main>
+<script>
+document.addEventListener('click', async (e) => {
+    const b = e.target.closest('button.copy');
+    if (!b || !b.dataset.v) return;
+    try { await navigator.clipboard.writeText(b.dataset.v); }
+    catch (err) { const t = document.createElement('textarea'); t.value = b.dataset.v; document.body.appendChild(t); t.select(); document.execCommand('copy'); t.remove(); }
+    const old = b.textContent; b.textContent = '✓'; b.classList.add('done');
+    setTimeout(() => { b.textContent = old; b.classList.remove('done'); }, 1200);
+});
+</script>
+</body>
+</html>
