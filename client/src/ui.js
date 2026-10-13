@@ -1,4 +1,4 @@
-// HUD and panels: coins, the six tiles (Store, Pets, Worlds, Trails, Config, Boxes), Spin / Invite /
+// HUD and panels: Wins, the six tiles (Store, Pets, Worlds, Trails, Config, Boxes), Spin / Invite /
 // Gift / Day, Nuke All, the progress bar and Skip, Friend Boost, the gear hotbar, the "Oops! You
 // fell?" card, gear pad popups, the win banner, the lucky wheel, pet hatching and every panel.
 import { $ } from './engine.js';
@@ -8,13 +8,12 @@ import * as BX from './bloxity.js';
 import { petThumb, petThumbLater, thumbReady } from './pets.js';
 import { getQuality, setQuality } from './fx.js';
 import {
-    CFG, STAGES, PETS, petById, RARITY, BOXES, boxById, TRAILS, trailById, GEAR, gearById, PASSES, PRODUCTS, DONATIONS,
-    SPIN, GIFTS, DAILY, dailyStatus, rewardText, coinMult, petSlots, equippedIds, passForGear, fmt, fmtComma, clock, playtimeText,
+    CFG, STAGES, DIFFS, PETS, petById, RARITY, BOXES, boxById, TRAILS, trailById, GEAR, gearById, PASSES, PRODUCTS, priceOf,
+    SPIN, GIFTS, DAILY, dailyStatus, rewardText, winsMult, petSlots, equippedIds, passForGear, fmt, fmtComma, clock, playtimeText,
 } from '../../shared/config.js';
 import { CHECKPOINTS } from '../../shared/course.js';
 
-const B = (n) => '<span class="bx">B</span>' + fmt(n);
-const C = (n) => '<span class="coin"></span> ' + fmt(n);
+const C = (n) => '<span class="cup">🏆</span>' + fmt(n);
 function setHtml(node, html) { if (node && node.innerHTML !== html) node.innerHTML = html; }
 function setText(node, t) { if (node && node.textContent !== t) node.textContent = t; }
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -23,11 +22,11 @@ export const promptEl = $('#promptBtn'), promptTxtEl = $('#promptTxt');
 // Every button clicks
 document.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('button'); if (b) sfx(b.classList.contains('g-green') ? 'clickBuy' : 'click'); }, true);
 
-// ----- coins counter (counts up smoothly) -----
+// ----- Wins counter (counts up smoothly) -----
 let shownCoins = 0;
 export function animateCounters(dt) {
-    if (Math.abs(shownCoins - S.coins) < 0.5) shownCoins = S.coins;
-    else shownCoins += (S.coins - shownCoins) * Math.min(1, dt * 8);
+    if (Math.abs(shownCoins - S.wins) < 0.5) shownCoins = S.wins;
+    else shownCoins += (S.wins - shownCoins) * Math.min(1, dt * 8);
     setText($('#coinVal'), fmtComma(Math.round(shownCoins)));
 }
 export function bumpCoins() { const p = $('#coinPill'); p.classList.remove('bump'); void p.offsetWidth; p.classList.add('bump'); }
@@ -48,7 +47,7 @@ export function updateHud() {
     const left = CFG.starterPackMinutes * 60 - (Date.now() - S.joinedAt) / 1000;
     $('#starter').hidden = !!S.starterPack;
     setText($('#starterTime'), clock(left > 0 ? left : 0));
-    $('#boostTag').hidden = !((S.coinBoostUntil || 0) > now || (S.passes && S.passes.DoubleCoins));
+    $('#boostTag').hidden = !((S.boostUntil || 0) > now || (S.passes && S.passes.DoubleWins));
     setText($('#friendBoost'), 'Friend Boost: ' + Math.round(Math.min(CFG.friendMax, S.friends || 0) * CFG.friendBoost * 100) + '%');
     const free = Object.values(S.freeBoxes || {}).reduce((a, b) => a + b, 0);
     $('#boxBadge').hidden = free <= 0; setText($('#boxBadge'), String(free));
@@ -72,16 +71,29 @@ export function showStageTitle(i) {
     const s = STAGES[i];
     if (!s) return;
     setText($('#stageName'), 'Stage ' + (i + 1) + ': ' + s.name);
-    setText($('#stageSub'), s.sub);
+    const d = DIFFS[s.diff];
+    setHtml($('#stageSub'), `<span class="diff" style="background:${d.color}">${d.label}</span> ${esc(s.sub)}${s.wins ? ' · <span class="cup">🏆</span>+' + s.wins : ''}`);
     const t = $('#stageTitle');
     t.style.opacity = 1;
     clearTimeout(titleTimer);
     titleTimer = setTimeout(() => { t.style.opacity = 0; }, 2600);
 }
 export function showWin(m) {
-    setText($('#winSub'), '+1 Win · +' + fmt(m.coins) + ' Coins · ' + m.secs + 's' + (m.best && m.best === m.secs ? ' (new best!)' : ''));
+    setText($('#winSub'), '+' + fmt(m.wins) + ' Wins · climb #' + m.climbs + ' · ' + m.secs + 's' + (m.best && m.best === m.secs ? ' (new best!)' : ''));
     $('#winBanner').hidden = false;
     setTimeout(() => { $('#winBanner').hidden = true; }, 3800);
+}
+let clearTimer;
+export function showStageClear(i, n) {
+    const s = STAGES[i], next = STAGES[i + 1];
+    setText($('#clearT'), 'STAGE ' + (i + 1) + ' CLEAR!');
+    const d = next && DIFFS[next.diff];
+    setHtml($('#clearS'), '<span class="cup">🏆</span>+' + fmt(n) + ' Wins' + (d ? ' · next: <span class="diff" style="background:' + d.color + '">' + d.label + '</span>' : ''));
+    const b = $('#clearBanner');
+    b.hidden = false; b.classList.remove('go'); void b.offsetWidth; b.classList.add('go');
+    clearTimeout(clearTimer);
+    clearTimer = setTimeout(() => { b.hidden = true; }, 1900);
+    void s;
 }
 export function showOof() { const o = $('#oof'); o.hidden = false; setTimeout(() => { o.hidden = true; }, 900); }
 export function flash(color, ms) {
@@ -117,7 +129,7 @@ export function showGearPop(id) {
     const g = gearById[id], pass = PASSES[passForGear(id)];
     gearPopId = id;
     setText($('#gpIc'), g.ic); setText($('#gpName'), g.name); setText($('#gpDesc'), g.desc + '.');
-    setHtml($('#gpBuy'), S.gear[id] ? (S.tool === id ? 'Unequip' : 'Equip') : B(pass.price));
+    setHtml($('#gpBuy'), S.gear[id] ? (S.tool === id ? 'Unequip' : 'Equip') : C(pass.price));
     $('#gearPop').hidden = false;
     clearTimeout(gearPopTimer);
     gearPopTimer = setTimeout(() => { $('#gearPop').hidden = true; }, 7000);
@@ -181,8 +193,8 @@ export function renderProgress(list) {
 }
 
 // =====================================================================================
-// Purchases: Bux on Bloxity (the platform shows its own confirm, the webhook grants), a free
-// confirm dialog on a local / demo server
+// Purchases: everything costs Wins. A confirm shows the price; the server checks it and takes
+// the Wins.
 // =====================================================================================
 let pendingBuy = null;
 export function buy(kind, key) {
@@ -190,20 +202,22 @@ export function buy(kind, key) {
     if (!item) return;
     if (kind === 'pass' && S.passes[key]) { toast(item.name + ' already owned!', '#6fe0ff'); if (item.gear) actions.equip(item.gear); return; }
     if (key === 'StarterPack' && S.starterPack) { toast('Starter Pack already claimed!', '#6fe0ff'); return; }
-    if (net.bux) { buyBux(kind, key); return; }
     pendingBuy = { kind, key };
+    const price = priceOf(kind, key, S);
+    const short = price - (S.wins || 0);
     setText($('#confirmIc'), item.ic || '🛒');
     setText($('#confirmTitle'), item.name);
     setText($('#confirmText'), item.desc || '');
-    setHtml($('#confirmCost'), B(item.price));
+    setHtml($('#confirmCost'), C(price) + ' Wins');
+    const yes = $('#confirmYes');
+    yes.disabled = short > 0;
+    setText(yes, short > 0 ? 'Need ' + fmt(short) + ' more' : 'Buy');
+    setText($('#confirmNote'), short > 0 ? 'Climb the tower to earn Wins: every checkpoint pays more the higher you go!' : 'You have ' + fmtComma(S.wins) + ' Wins');
     $('#confirm').hidden = false;
     setMusicDuck(true);
 }
-async function buyBux(kind, key) {
-    const r = await BX.buyWithBux(kind, key);
-    if (r && r.success) { toast('Purchase complete!', '#7dff6b'); sfx('buy'); return; }
-    if (r && r.error && !/cancel/i.test(r.error)) toast(r.error, '#ff5a5a');
-}
+// The server said you can't afford it (prices can change while the dialog is open)
+export function notEnough(m) { toast('Not enough Wins! You need ' + fmt(m.need) + ' more for ' + m.name, '#ff5a5a'); }
 function closeConfirm() { $('#confirm').hidden = true; pendingBuy = null; if (!modalOpen()) setMusicDuck(false); }
 $('#confirmYes').addEventListener('click', () => { const p = pendingBuy; closeConfirm(); if (p) net.send('buy', p); });
 $('#confirmNo').addEventListener('click', closeConfirm);
@@ -248,24 +262,25 @@ function renderModal() {
     const body = $('#modalBody');
     const scroll = body.scrollTop;
     body.innerHTML = '';
-    const titles = { store: 'STORE!', pets: 'PETS', worlds: 'WORLDS', trails: 'TRAILS', config: 'CONFIG', boxes: 'BOXES', gifts: 'GIFTS', invite: 'INVITE', donate: 'DONATE', teleport: 'TELEPORT' };
+    const titles = { store: 'STORE!', pets: 'PETS', worlds: 'WORLDS', trails: 'TRAILS', config: 'CONFIG', boxes: 'BOXES', gifts: 'GIFTS', invite: 'INVITE', teleport: 'TELEPORT' };
     setText($('#modalTitle'), titles[modalKind] || '');
     tabs(null);
-    ({ store: renderStore, pets: renderPets, worlds: renderWorlds, trails: renderTrails, config: renderConfig, boxes: renderBoxes, gifts: renderGifts, invite: renderInvite, donate: renderDonate, teleport: renderTeleport }[modalKind] || (() => {}))(body);
+    ({ store: renderStore, pets: renderPets, worlds: renderWorlds, trails: renderTrails, config: renderConfig, boxes: renderBoxes, gifts: renderGifts, invite: renderInvite, teleport: renderTeleport }[modalKind] || (() => {}))(body);
     body.scrollTop = scroll;
 }
 
 // ----- Store -----
 function passCard(key, cls) {
     const p = PASSES[key], own = !!S.passes[key];
-    return card({ ic: p.ic, name: p.name, desc: p.desc, cls: (cls || '') + (own ? ' own' : ''), btn: own ? (p.gear ? (S.tool === p.gear ? 'Equipped' : 'Equip') : 'Owned') : B(p.price), btnCls: own ? 'g-blue' : 'g-green', disabled: own && !p.gear, onClick: () => (own && p.gear ? actions.equip(p.gear) : buy('pass', key)) });
+    return card({ ic: p.ic, name: p.name, desc: p.desc, cls: (cls || '') + (own ? ' own' : ''), btn: own ? (p.gear ? (S.tool === p.gear ? 'Equipped' : 'Equip') : 'Owned') : C(p.price), btnCls: own ? 'g-blue' : S.wins >= p.price ? 'g-green' : 'g-grey', disabled: own && !p.gear, onClick: () => (own && p.gear ? actions.equip(p.gear) : buy('pass', key)) });
 }
 function prodCard(key, cls) {
     const p = PRODUCTS[key];
-    return card({ ic: p.ic, name: p.name, desc: p.desc, cls, btn: (p.was ? `<span class="was">${fmt(p.was)}</span>` : '') + B(p.price), onClick: () => buy('product', key) });
+    const price = priceOf('product', key, S);
+    return card({ ic: p.ic, name: p.name, desc: p.desc, cls, btn: (p.was ? `<span class="was">${fmt(p.was)}</span>` : '') + C(price), btnCls: S.wins >= price ? 'g-green' : 'g-grey', onClick: () => buy('product', key) });
 }
 function renderStore(body) {
-    tabs([['featured', '⭐ Featured'], ['gear', '🌀 Gear'], ['coins', '🪙 Coins'], ['more', '✨ More']]);
+    tabs([['featured', '⭐ Featured'], ['gear', '🌀 Gear'], ['boosts', '⏱️ Boosts'], ['more', '✨ More']]);
     const tab = modalTab || 'featured';
     const g = el('div', 'grid');
     if (tab === 'featured') {
@@ -275,21 +290,21 @@ function renderStore(body) {
         g.appendChild(passCard('Jetpack'));
         g.appendChild(passCard('GrappleHook'));
         g.appendChild(passCard('SlapTool'));
-        g.appendChild(passCard('DoubleCoins'));
+        g.appendChild(passCard('DoubleWins'));
     } else if (tab === 'gear') {
-        for (const k of ['SuperCoil', 'SpeedCoil', 'GravityCoil', 'GrappleHook', 'SlapTool', 'MagicCarpet', 'Jetpack']) g.appendChild(passCard(k, k === 'MagicCarpet' ? 'carpet' : ''));
-    } else if (tab === 'coins') {
-        for (const k of ['Coins1K', 'Coins6K', 'Coins40K']) g.appendChild(prodCard(k));
-        g.appendChild(passCard('DoubleCoins'));
+        for (const k of ['SpeedCoil', 'GravityCoil', 'SlapTool', 'SuperCoil', 'GrappleHook', 'Jetpack', 'MagicCarpet']) g.appendChild(passCard(k, k === 'MagicCarpet' ? 'carpet' : ''));
+    } else if (tab === 'boosts') {
+        g.appendChild(prodCard('WinsBoost'));
+        g.appendChild(passCard('DoubleWins'));
         g.appendChild(prodCard('Spins5'));
     } else {
         g.appendChild(prodCard('Skip'));
         g.appendChild(prodCard('NukeAll'));
         g.appendChild(passCard('VIP', 'vip'));
-        g.appendChild(card({ ic: '💖', name: 'Donate', desc: 'Support the game and get on the board', btn: 'Open', btnCls: 'g-pink', onClick: () => openModal('donate') }));
+
     }
     body.appendChild(g);
-    if (!net.bux) note(body, 'Demo server: purchases are free here. On Bloxity they cost Bux.');
+    note(body, 'Everything is bought with Wins. Earn them at every checkpoint (more on the harder stages) and at the top of the tower!');
 }
 
 // ----- Pets -----
@@ -301,15 +316,15 @@ function petIcon(def) {
 }
 function renderPets(body) {
     const eq = new Set(S.equippedPets || []);
-    const mult = coinMult({ ...S, passes: {}, coinBoostUntil: 0 }, 0, 0);
+    const mult = winsMult({ ...S, passes: {}, boostUntil: 0 }, 0, 0);
     const top = el('div', 'row');
-    top.innerHTML = `<span class="ic">🐾</span><span class="tx"><b class="o1">Equipped ${eq.size}/${petSlots(S)} · Coins x${(Math.round(mult * 100) / 100)}</b><small class="o1">${S.pets.length}/${CFG.maxPets} pets · click a pet to equip or unequip it</small></span>`;
+    top.innerHTML = `<span class="ic">🐾</span><span class="tx"><b class="o1">Equipped ${eq.size}/${petSlots(S)} · Wins x${(Math.round(mult * 100) / 100)}</b><small class="o1">${S.pets.length}/${CFG.maxPets} pets · click a pet to equip or unequip it</small></span>`;
     const best = el('button', 'btn g-green o1', 'Equip Best');
     best.addEventListener('click', () => net.send('petBest'));
     top.appendChild(best);
     body.appendChild(top);
     if (!S.pets.length) {
-        note(body, 'No pets yet! Open a Box to hatch your first squishy pet. Pets multiply the Coins you earn.');
+        note(body, 'No pets yet! Open a Box to hatch your first squishy pet. Pets multiply the Wins you earn.');
         const b = el('button', 'btn g-purple o', 'Open Boxes');
         b.addEventListener('click', () => openModal('boxes'));
         body.appendChild(b);
@@ -331,7 +346,7 @@ function renderPets(body) {
 
 // ----- Boxes -----
 function renderBoxes(body) {
-    note(body, 'Hatch squishy pets with Coins! Equipped pets multiply every Coin you earn.');
+    note(body, 'Hatch squishy pets with Wins! Equipped pets multiply every Win you earn.');
     for (const box of BOXES) {
         const total = box.drops.reduce((a, d) => a + d[1], 0);
         const wrap = el('div', 'row');
@@ -344,10 +359,10 @@ function renderBoxes(body) {
             wrap.appendChild(f);
         }
         const b1 = el('button', 'btn g-green o1', 'Open 1');
-        b1.disabled = S.coins < box.price;
+        b1.disabled = S.wins < box.price;
         b1.addEventListener('click', () => net.send('hatch', { box: box.id, n: 1 }));
         const b3 = el('button', 'btn g-blue o1', 'Open 3');
-        b3.disabled = S.coins < box.price * 3;
+        b3.disabled = S.wins < box.price * 3;
         b3.addEventListener('click', () => net.send('hatch', { box: box.id, n: 3 }));
         wrap.appendChild(b1); wrap.appendChild(b3);
         const drops = el('div', 'petgrid');
@@ -373,7 +388,7 @@ function renderTrails(body) {
         g.appendChild(card({
             ic: sw, name: t.name, desc: t.vip ? 'Comes with VIP' : t.price ? '' : 'Free', cls: on ? 'own' : '',
             btn: on ? 'Equipped' : own ? 'Equip' : t.vip ? '👑 VIP' : C(t.price), btnCls: own ? 'g-blue' : t.vip ? 'g-gold' : 'g-green',
-            disabled: on || (!own && !t.vip && S.coins < t.price),
+            disabled: on || (!own && !t.vip && S.wins < t.price),
             onClick: () => (t.vip && !own ? buy('pass', 'VIP') : net.send('trail', { id: t.id })),
         }));
     }
@@ -391,7 +406,7 @@ function renderWorlds(body) {
     const r = el('div', 'grid');
     r.appendChild(card({ ic: '🏠', name: 'Lobby', desc: 'Back to the bottom', btn: 'Go', onClick: () => { closeModal(); actions.teleportLobby(); } }));
     if (S.stage >= 0) r.appendChild(card({ ic: '🚩', name: 'My checkpoint', desc: 'Stage ' + (S.stage + 1) + ': ' + STAGES[S.stage].name, btn: 'Go', onClick: () => { closeModal(); actions.teleportCheckpoint(); } }));
-    r.appendChild(card({ ic: '👑', name: 'Any stage', desc: 'VIP: teleport to every stage you reached', btn: S.passes.VIP ? 'Open' : B(PASSES.VIP.price), btnCls: S.passes.VIP ? 'g-gold' : 'g-green', onClick: () => (S.passes.VIP ? openModal('teleport') : buy('pass', 'VIP')) }));
+    r.appendChild(card({ ic: '👑', name: 'Any stage', desc: 'VIP: teleport to every stage you reached', btn: S.passes.VIP ? 'Open' : C(PASSES.VIP.price), btnCls: S.passes.VIP ? 'g-gold' : 'g-green', onClick: () => (S.passes.VIP ? openModal('teleport') : buy('pass', 'VIP')) }));
     body.appendChild(r);
 }
 function renderTeleport(body) {
@@ -445,7 +460,7 @@ function renderConfig(body) {
     c.appendChild(inp); c.appendChild(go);
     body.appendChild(c);
     const stats = el('div', 'row');
-    stats.innerHTML = `<span class="ic">📊</span><span class="tx"><b class="o1">Wins ${fmt(S.wins)} · Best climb ${S.best ? S.best + 's' : '—'}</b><small class="o1">Playtime ${playtimeText(S.playtime)} · Coins earned ${fmt(S.totalCoins)}</small></span>`;
+    stats.innerHTML = `<span class="ic">📊</span><span class="tx"><b class="o1">Climbs ${fmt(S.climbs)} · Best climb ${S.best ? S.best + 's' : '—'}</b><small class="o1">Playtime ${playtimeText(S.playtime)} · Wins earned ${fmt(S.totalWins)}</small></span>`;
     body.appendChild(stats);
 }
 export function codeResult(m) { toast(m.ok ? '🎟️ ' + m.text : m.text, m.ok ? '#7dff6b' : '#ff5a5a'); }
@@ -469,7 +484,7 @@ function renderGifts(body) {
 
 // ----- Invite -----
 function renderInvite(body) {
-    note(body, 'Play with friends! Friend Boost gives +' + Math.round(CFG.friendBoost * 100) + '% Coins for every Bloxity friend in your server (up to +' + Math.round(CFG.friendBoost * CFG.friendMax * 100) + '%).');
+    note(body, 'Play with friends! Friend Boost gives +' + Math.round(CFG.friendBoost * 100) + '% Wins for every Bloxity friend in your server (up to +' + Math.round(CFG.friendBoost * CFG.friendMax * 100) + '%).');
     const r = el('div', 'row');
     r.innerHTML = '<span class="ic">🔗</span><span class="tx"><b class="o1">Invite link</b><small class="o1">Send it to a friend</small></span>';
     const b = el('button', 'btn g-green o1', 'Copy');
@@ -492,14 +507,6 @@ function renderInvite(body) {
     } else note(body, 'Log in to Bloxity to invite your friends directly.');
 }
 
-// ----- Donate -----
-function renderDonate(body) {
-    note(body, 'Every donation goes on the Donations Leaderboard, and the top three donors get a statue in the lobby! 💖');
-    const g = el('div', 'grid');
-    for (const k of DONATIONS) g.appendChild(prodCard(k));
-    body.appendChild(g);
-}
-
 // =====================================================================================
 // Daily rewards
 // =====================================================================================
@@ -515,7 +522,7 @@ function renderDaily() {
         const done = i < st.day || (!st.can && i === st.day);
         const now = st.can && i === st.day;
         const d = el('div', 'dcard o1' + (done ? ' done' : '') + (now ? ' now' : ''));
-        d.innerHTML = `<span class="d">Day ${i + 1}</span><span class="i">${r.box ? boxById[r.box].ic : r.spins && !r.coins ? '🎡' : '🪙'}</span><span>${esc(rewardText(r))}</span>`;
+        d.innerHTML = `<span class="d">Day ${i + 1}</span><span class="i">${r.box ? boxById[r.box].ic : r.spins && !r.wins ? '🎡' : '🏆'}</span><span>${esc(rewardText(r))}</span>`;
         cards.appendChild(d);
     });
     $('#dailyClaim').disabled = !st.can;
@@ -577,7 +584,7 @@ export function spinTo(i) {
         else {
             spinning = false;
             const s = SPIN[i];
-            toast('🎡 You won ' + (s.coins ? fmt(s.coins) + ' Coins' : s.label) + '!', '#ffd028');
+            toast('🎡 You won ' + (s.wins ? fmt(s.wins) + ' Wins' : s.label) + '!', '#ffd028');
             sfx('buy');
             renderSpinInfo();
         }
@@ -624,7 +631,7 @@ $('#btnWorlds').addEventListener('click', () => openModal('worlds'));
 $('#btnTrails').addEventListener('click', () => openModal('trails'));
 $('#btnConfig').addEventListener('click', () => openModal('config'));
 $('#btnBoxes').addEventListener('click', () => openModal('boxes'));
-$('#coinPlus').addEventListener('click', () => openModal('store', 'coins'));
+$('#coinPlus').addEventListener('click', () => openModal('store', 'boosts'));
 $('#starter').addEventListener('click', () => buy('product', 'StarterPack'));
 $('#btnSpin').addEventListener('click', openSpin);
 $('#btnInvite').addEventListener('click', () => openModal('invite'));
@@ -633,7 +640,7 @@ $('#btnDaily').addEventListener('click', openDaily);
 $('#nukeBtn').addEventListener('click', () => buy('product', 'NukeAll'));
 $('#skipBtn').addEventListener('click', () => buy('product', 'Skip'));
 actions.openWorlds = () => openModal('worlds');
-actions.openDonate = () => openModal('donate');
+actions.openStore = () => openModal('store');
 actions.openTeleport = () => openModal('teleport');
 actions.buy = buy;
 

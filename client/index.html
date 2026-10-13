@@ -92,7 +92,7 @@ button:focus-visible { outline: 3px solid var(--yellow); outline-offset: 2px; }
 @keyframes giftBob { 50% { transform: translateY(-0.2rem) rotate(-3deg); } }
 #coinBar { display: flex; align-items: center; gap: 0.3rem; }
 #coinBar .pill { position: relative; display: flex; align-items: center; gap: 0.45rem; min-width: 8.8rem; height: 2.1rem; padding: 0 0.8rem 0 0.25rem; border: 3px solid var(--ink); border-radius: 1.2rem; background: linear-gradient(#ffd96a, #ffaa1c); box-shadow: inset 0 0.2rem 0 rgba(255,255,255,0.45), inset 0 -0.25rem 0 rgba(0,0,0,0.15); }
-#coinBar .coin { font-size: 1.7rem; }
+#coinBar .trophy { font-size: 1.55rem; line-height: 1; filter: drop-shadow(0 0.12rem 0 rgba(0,0,0,0.35)); margin-left: 0.15rem; }
 #coinBar b { font-size: 1.35rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 #coinBar .pill.bump { animation: bump 0.45s cubic-bezier(0.34, 1.8, 0.5, 1); }
 @keyframes bump { 35% { transform: scale(1.15); } }
@@ -281,6 +281,15 @@ body.touch #fuel { bottom: 9rem; }
 .err { color: #ffd0d8; max-width: 22rem; }
 
 
+.cup { display: inline-block; font-style: normal; margin-right: 0.12em; filter: drop-shadow(0 0.08em 0 rgba(0,0,0,0.3)); }
+.diff { display: inline-block; padding: 0.02rem 0.45rem; border-radius: 0.4rem; border: 2px solid var(--ink); color: #fff; font-weight: 800; font-size: 0.85em; letter-spacing: 0.04em; text-shadow: 0 1px 0 rgba(0,0,0,0.5); box-shadow: 0 0 0.8rem currentColor; }
+#clearBanner { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); text-align: center; pointer-events: none; white-space: nowrap; }
+#clearBanner .t { font-family: "Montserrat", var(--font); font-size: 3.4rem; font-weight: 800; color: #9aff7a; letter-spacing: 0.02em; }
+#clearBanner .s { font-size: 1.35rem; font-weight: 700; margin-top: 0.2rem; }
+#clearBanner.go .t { animation: clearPop 1.9s cubic-bezier(0.2, 1.5, 0.4, 1) forwards; }
+#clearBanner.go .s { animation: clearFade 1.9s ease forwards; }
+@keyframes clearPop { 0% { transform: scale(0.3) rotate(-8deg); opacity: 0; } 18% { transform: scale(1.12) rotate(2deg); opacity: 1; } 30% { transform: scale(1); } 85% { opacity: 1; } 100% { opacity: 0; transform: translateY(-1rem) scale(0.96); } }
+@keyframes clearFade { 0%, 12% { opacity: 0; } 25%, 85% { opacity: 1; } 100% { opacity: 0; } }
 /* premium polish: shine sweeps, glossy panels, lively badges */
 .tile::after { content: ''; position: absolute; inset: 0; border-radius: 0.6rem; background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.5) 50%, transparent 62%) no-repeat; background-size: 250% 100%; background-position: 160% 0; animation: tileShine 5.5s ease-in-out infinite; pointer-events: none; }
 .tile:nth-child(2)::after { animation-delay: 0.25s; } .tile:nth-child(3)::after { animation-delay: 0.5s; } .tile:nth-child(4)::after { animation-delay: 0.75s; } .tile:nth-child(5)::after { animation-delay: 1s; } .tile:nth-child(6)::after { animation-delay: 1.25s; }
@@ -359,9 +368,9 @@ body.touch #fuel { bottom: 9rem; }
                 <span class="info"><span class="tm o1" id="starterTime">29:59</span><span class="pct o1">200%</span></span>
             </button>
             <div id="coinBar">
-                <div class="pill" id="coinPill"><span class="coin" aria-hidden="true"></span><b class="o1" id="coinVal">0</b></div>
-                <button class="btn g-green o" id="coinPlus" aria-label="Get coins">+</button>
-                <span class="o1" id="boostTag" hidden>x2 COINS</span>
+                <div class="pill" id="coinPill"><span class="trophy" aria-hidden="true">🏆</span><b class="o1" id="coinVal">0</b></div>
+                <button class="btn g-green o" id="coinPlus" aria-label="Boosts">+</button>
+                <span class="o1" id="boostTag" hidden>x2 WINS</span>
             </div>
             <div id="tiles">
                 <button class="tile t-store" id="btnStore" aria-label="Store"><span class="sale">70%</span>
@@ -411,6 +420,7 @@ body.touch #fuel { bottom: 9rem; }
             <p class="o1" id="gpDesc">Hook, swing, and fly across obstacles.</p>
             <div class="acts"><button class="btn g-green o1" id="gpBuy"><span class="bx">B</span>249</button><button class="btn g-grey o1" id="gpClose">Close</button></div>
         </div>
+        <div id="clearBanner" class="passive" hidden><div class="t o" id="clearT">STAGE 1 CLEAR!</div><div class="s o1" id="clearS"></div></div>
         <div id="winBanner" hidden><div class="rays"></div><div class="t o">YOU WIN!</div><div class="s o" id="winSub">+1 Win</div></div>
         <div id="oof" class="o passive" hidden>SPLAT!</div>
         <div id="toasts"></div>
@@ -444,7 +454,7 @@ body.touch #fuel { bottom: 9rem; }
             <div class="o1" id="confirmText">Magic Carpet</div>
             <div class="cost o1" id="confirmCost"><span class="bx">B</span>599</div>
             <div class="acts"><button class="btn g-green o" id="confirmYes">Buy</button><button class="btn g-grey o" id="confirmNo">Cancel</button></div>
-            <small class="o1" id="confirmNote" style="opacity:0.85">Demo mode: free on this server</small>
+            <small class="o1" id="confirmNote" style="opacity:0.9"></small>
         </div>
     </div>
 

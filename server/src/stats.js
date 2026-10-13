@@ -32,9 +32,9 @@ export async function statsSummary(days) {
         newPlayers: lengths(list.filter((d) => d.fresh)),
         returning: lengths(list.filter((d) => !d.fresh)),
         neverClimbedPct: pct(list.filter((d) => d.maxStage < 0).length, list.length),
-        reachedTopPct: pct(list.filter((d) => d.wins > 0).length, list.length),
+        reachedTopPct: pct(list.filter((d) => d.climbs > 0).length, list.length),
         avgFalls: Math.round((list.reduce((a, d) => a + (d.falls || 0), 0) / Math.max(1, list.length)) * 10) / 10,
-        avgCoins: Math.round(list.reduce((a, d) => a + (d.coins || 0), 0) / Math.max(1, list.length)),
+        avgWinsEarned: Math.round(list.reduce((a, d) => a + (d.wins || 0), 0) / Math.max(1, list.length)),
         boughtSomethingPct: pct(list.filter((d) => d.buys > 0).length, list.length),
         stages: STAGES.map((s, i) => ({ stage: s.name, reachedPct: pct(list.filter((d) => d.maxStage >= i).length, list.length) })),
     };

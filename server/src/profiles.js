@@ -14,7 +14,7 @@ const FILE = path.join(DATA_DIR, 'profiles.json');
 
 const profiles = new Map();
 let dirty = false;
-let db = null;          // { profiles, sessions, grants, txs } collections once connected
+let db = null;          // { profiles, sessions } collections once connected
 let dbReady = null;     // promise of the connection
 
 if (USE_DB) {
@@ -34,12 +34,11 @@ async function connectDb() {
     const client = new MongoClient(MONGODB_URI, { maxPoolSize: 10, serverSelectionTimeoutMS: 10000 });
     await client.connect();
     const d = client.db(process.env.MONGODB_DB || undefined);
-    db = { profiles: d.collection('profiles'), sessions: d.collection('sessions'), grants: d.collection('grants'), txs: d.collection('transactions') };
+    db = { profiles: d.collection('profiles'), sessions: d.collection('sessions') };
     await Promise.all([
-        db.profiles.createIndex({ wins: -1 }),
+        db.profiles.createIndex({ totalWins: -1 }),
         db.profiles.createIndex({ playtime: -1 }),
-        db.profiles.createIndex({ donated: -1 }),
-        db.grants.createIndex({ uid: 1 }),
+        db.profiles.createIndex({ climbs: -1 }),
         db.sessions.createIndex({ at: -1 }),
     ]).catch((e) => console.warn('[DB] index:', e.message));
     console.log('[DB] connected to MongoDB');
@@ -58,10 +57,10 @@ export async function storeReady() {
 export function defaultProfile(uid, name) {
     return {
         uid, name,
-        coins: 0, totalCoins: 0, wins: 0, playtime: 0, donated: 0,
+        wins: 0, totalWins: 0, climbs: 0, playtime: 0,
         stage: -1, maxStage: 0, best: 0,
         pets: [], equippedPets: [], petSeq: 0, trails: { starter: true }, trail: 'starter',
-        gear: {}, tool: '', passes: {}, starterPack: false, coinBoostUntil: 0,
+        gear: {}, tool: '', passes: {}, starterPack: false, boostUntil: 0,
         spins: 1, spinAt: 0, daily: {}, gifts: {}, giftDay: '', vipClaimAt: 0, codes: {}, quest: 0, freeBoxes: {},
         firstPlay: Date.now(),
     };
@@ -156,13 +155,13 @@ export async function releaseProfile(uid, stillOnline) {
 }
 
 // Best players across every pod, refreshed in the background
-const BOARD_KEYS = ['wins', 'playtime', 'donated'];
-const board = { wins: [], playtime: [], donated: [] };
+const BOARD_KEYS = ['totalWins', 'playtime', 'climbs'];
+const board = { totalWins: [], playtime: [], climbs: [] };
 async function refreshBoards() {
     if (!USE_DB || !db) return;
     try {
         for (const key of BOARD_KEYS) {
-            const docs = await db.profiles.find({}, { projection: { name: 1, wins: 1, playtime: 1, donated: 1 } }).sort({ [key]: -1 }).limit(10).toArray();
+            const docs = await db.profiles.find({}, { projection: { name: 1, totalWins: 1, playtime: 1, climbs: 1 } }).sort({ [key]: -1 }).limit(10).toArray();
             board[key] = docs.map(fromDoc);
         }
     } catch (e) { console.warn('[DB] boards:', e.message); }
@@ -173,41 +172,6 @@ export function topProfiles(key) {
     for (const p of board[key] || []) byUid.set(p.uid, p);
     for (const p of profiles.values()) byUid.set(p.uid, p);
     return [...byUid.values()].sort((a, b) => (b[key] || 0) - (a[key] || 0)).slice(0, 10);
-}
-
-// ----- Bux purchases that must reach a player on any pod -----
-// Webhook deliveries are retried by Bloxity; the transaction id is recorded once across all pods
-const seenTx = new Map();
-export async function firstDelivery(txId) {
-    if (USE_DB) {
-        await storeReady();
-        try { await db.txs.insertOne({ _id: txId, at: new Date() }); return true; } catch (e) {
-            if (e.code === 11000) return false;
-            throw e;
-        }
-    }
-    const now = Date.now();
-    for (const [k, t] of seenTx) if (now - t > 24 * 3600e3) seenTx.delete(k);
-    if (seenTx.has(txId)) return false;
-    seenTx.set(txId, now);
-    return true;
-}
-// Queue a purchase for a player who isn't on this pod; whichever pod hosts them applies it
-export async function queueGrant(uid, name, kind, key, tx) {
-    await storeReady();
-    await db.grants.insertOne({ uid, name, kind, key, tx, at: new Date() });
-}
-// Claims (removes and returns) queued purchases for the given players
-export async function claimGrants(uids) {
-    if (!USE_DB || !db || !uids.length) return [];
-    const out = [];
-    const pending = await db.grants.find({ uid: { $in: uids } }, { projection: { _id: 1 } }).toArray();
-    for (const { _id } of pending) {
-        const g = await db.grants.findOneAndDelete({ _id });
-        const doc = g && g.value !== undefined ? g.value : g;   // driver v5 wraps, v6 doesn't
-        if (doc && doc.uid) out.push(doc);
-    }
-    return out;
 }
 
 // Rooms also save on dispose: Colyseus disposes rooms (and awaits onDispose) on SIGTERM,

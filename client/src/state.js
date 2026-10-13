@@ -1,9 +1,9 @@
 // Local mirror of this player's progress. The server owns the real values:
 // public stats arrive through the room state, private ones in "profile" messages.
 export const S = {
-    coins: 0, totalCoins: 0, wins: 0, playtime: 0, donated: 0, stage: -1, maxStage: 0, best: 0,
+    wins: 0, totalWins: 0, climbs: 0, playtime: 0, stage: -1, maxStage: 0, best: 0,
     pets: [], equippedPets: [], trails: { starter: true }, trail: 'starter', gear: {}, tool: '', passes: {},
-    starterPack: false, coinBoostUntil: 0, spins: 0, spinAt: 0, daily: null, codes: {}, vipClaimAt: 0,
+    starterPack: false, boostUntil: 0, spins: 0, spinAt: 0, daily: null, codes: {}, vipClaimAt: 0,
     firstPlay: Date.now(), freeBoxes: {}, giftClaimed: {}, sessionSecs: 0, joinedAt: Date.now(), name: '', friends: 0,
     profileAt: Date.now(),
 };
@@ -14,7 +14,6 @@ export const actions = {};
 export const net = {
     room: null,
     offset: 0,
-    bux: false,
     send(type, msg) { if (this.room) this.room.send(type, msg || {}); },
     // Server clock in ms, so moving platforms and timers line up for everyone
     now() { return Date.now() + this.offset; },

@@ -122,11 +122,11 @@ void RoomEnvironment;
 export const hemi = new T.HemisphereLight(0xd8c4ff, 0x2a1048, 0.6);
 scene.add(hemi);
 // Two coloured accent lights travel with the player (main.js), tinted by the stage you're on
-export const accentA = new T.PointLight(0xff4ad8, 260, 60, 1.8);
-export const accentB = new T.PointLight(0x3ad8ff, 200, 60, 1.8);
+export const accentA = new T.PointLight(0xff4ad8, 110, 45, 1.8);
+export const accentB = new T.PointLight(0x3ad8ff, 80, 45, 1.8);
 scene.add(accentA, accentB);
 // a soft fill from the camera's side, so characters and pets always read clearly against the dark
-export const camFill = new T.DirectionalLight(0xe8dcff, 0.55);
+export const camFill = new T.DirectionalLight(0xe8dcff, 0.42);
 scene.add(camFill, camFill.target);
 export const sun = new T.DirectionalLight(0xffe6f0, 1.75);
 sun.castShadow = true;

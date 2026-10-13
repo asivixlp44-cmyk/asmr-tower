@@ -195,9 +195,15 @@ export const coinTex = () => once('coin', () => {
     g.addColorStop(0, '#fff6b0'); g.addColorStop(0.6, '#ffcc2a'); g.addColorStop(1, '#e89a10');
     x.fillStyle = g; x.beginPath(); x.arc(128, 128, 126, 0, Math.PI * 2); x.fill();
     x.strokeStyle = '#c87a08'; x.lineWidth = 10; x.beginPath(); x.arc(128, 128, 100, 0, Math.PI * 2); x.stroke();
-    x.fillStyle = '#ffe680'; x.strokeStyle = '#c87a08'; x.lineWidth = 6; x.beginPath();
-    for (let k = 0; k <= 10; k++) { const a = k * Math.PI / 5 - Math.PI / 2, r = k % 2 ? 30 : 66; x.lineTo(128 + Math.cos(a) * r, 128 + Math.sin(a) * r); }
+    // a trophy embossed in the middle: every coin is +1 Win
+    x.fillStyle = '#fff0a0'; x.strokeStyle = '#b86a00'; x.lineWidth = 6; x.lineJoin = 'round';
+    x.beginPath();
+    x.moveTo(86, 70); x.lineTo(170, 70); x.quadraticCurveTo(170, 132, 128, 140); x.quadraticCurveTo(86, 132, 86, 70);
     x.fill(); x.stroke();
+    x.beginPath(); x.arc(84, 92, 16, Math.PI * 0.5, Math.PI * 1.5); x.stroke();
+    x.beginPath(); x.arc(172, 92, 16, -Math.PI * 0.5, Math.PI * 0.5); x.stroke();
+    x.fillRect(120, 140, 16, 22); x.strokeRect(120, 140, 16, 22);
+    x.beginPath(); x.moveTo(98, 162); x.lineTo(158, 162); x.lineTo(162, 184); x.lineTo(94, 184); x.closePath(); x.fill(); x.stroke();
     return texFrom(c);
 });
 

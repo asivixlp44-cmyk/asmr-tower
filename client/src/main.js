@@ -23,11 +23,11 @@ import { heldModel, carpet as carpetModel, waveCarpet, jetpack as jetpackModel }
 import { PetTrain } from './pets.js';
 import {
     updateHud, toast, showStageTitle, showWin, showOof, flash, teleportFx, showOops, hideOops, showGearPop, renderHotbar, hotbarGear,
-    setFuel, renderProgress, animateCounters, bumpCoins, openDailyOnJoin, refreshModal, refreshDaily, refreshSpin, openModal,
+    setFuel, renderProgress, animateCounters, bumpCoins, openDailyOnJoin, refreshModal, refreshDaily, refreshSpin, openModal, notEnough, showStageClear,
     promptEl, promptTxtEl, codeResult, spinTo, showHatch, buy, closeTop, anyPopup,
 } from './ui.js';
 import { CFG, STAGES, KITS, SKINS, trailById, petById, gearById, passForGear, fmt, clamp } from '../../shared/config.js';
-import { CHECKPOINTS, COINS, SUMMIT, checkpointSpot, stageAtY, COURSE_TOP } from '../../shared/course.js';
+import { CHECKPOINTS, COINS, SUMMIT, checkpointSpot, stageAtY, COURSE_TOP, COURSE, CORNER_Y, cornerXZ, LAND } from '../../shared/course.js';
 
 // =====================================================================================
 // Local player
@@ -274,7 +274,7 @@ actions.teleportTo = (i) => {
 };
 
 // =====================================================================================
-// Checkpoints, coins, the summit, gear pads, doors
+// Checkpoints, floating trophies, the summit, gear pads, doors
 // =====================================================================================
 actions.checkpoint = (i) => { if (!P.dead) net.send('cp', { i }); };
 let summitLock = 0;
@@ -442,7 +442,7 @@ function syncRemotes(dt, t) {
     const seen = new Set(), marks = [];
     room.state.players.forEach((p, id) => {
         if (id === room.sessionId) {
-            S.name = p.name; S.wins = p.wins; S.friends = p.friends;
+            S.name = p.name; S.friends = p.friends;
             if (!rig || rig.userData.kit !== p.kit) { buildPlayer(p.kit, p.skin); rig.userData.kit = p.kit; }
             return;
         }
@@ -530,7 +530,7 @@ async function connect(name) {
     });
     net.room = room;
     joinSynced = false;
-    room.onMessage('hello', (m) => { net.offset = m.now - Date.now(); net.bux = !!m.bux; net.bloxity = !!m.bloxity; });
+    room.onMessage('hello', (m) => { net.offset = m.now - Date.now(); net.bloxity = !!m.bloxity; });
     room.onMessage('authed', () => { net.bloxity = true; });
     room.onMessage('emote', (m) => { const r = remotes.get(m.s); if (r) playEmoteOn(r.blox, m.id); });
     room.onMessage('chat', (m) => {
@@ -545,8 +545,8 @@ async function connect(name) {
         const first = lastCoins === null;
         Object.assign(S, m);
         S.profileAt = Date.now();
-        if (!first && S.coins > lastCoins) bumpCoins();
-        lastCoins = S.coins;
+        if (!first && S.wins > lastCoins) bumpCoins();
+        lastCoins = S.wins;
         if (S.stage !== lastStage) {
             for (let i = 0; i < CHECKPOINTS.length; i++) lightCheckpoint(i, i <= S.stage);
             if (lastStage === -2 && S.stage >= 0) setTimeout(() => showOops('Continue from Stage ' + (S.stage + 1) + ' for free.', 'Welcome back!'), 2500);
@@ -557,21 +557,22 @@ async function connect(name) {
         renderHotbar();
         refreshModal(); refreshDaily(); refreshSpin();
         openDailyOnJoin();
-        // live Bux prices from the Bloxity IAP catalog (only there: a local server has no catalog)
-        if (first && (ON_BLOXITY_HOST || BX.isEmbedded())) { BX.loadCatalogPrices().then((changed) => { if (changed) { refreshGearPads(); refreshModal(); } }); }
     });
     room.onMessage('toast', (m) => toast(m.text, m.color));
     room.onMessage('announce', (m) => toast(m.text, m.color));
-    room.onMessage('coins', (m) => {
-        floatText('+' + fmt(m.n) + ' 🪙', '#ffd028', P.pos.clone().add(new V3(0, 6.5, 0)), 4.4);
+    room.onMessage('earn', (m) => {
+        floatText('+' + fmt(m.n) + ' 🏆', '#ffd028', P.pos.clone().add(new V3(0, 6.5, 0)), 4.4);
         if (m.why === 'cp') {
-            toast('🚩 Checkpoint! +' + fmt(m.n) + ' Coins', '#7dff6b');
-            sfx('checkpoint');
+            // Stage clear: a celebration, then the next (harder) stage's title
+            showStageClear(m.i, m.n);
+            sfx('checkpoint'); rumble(0.4, 180);
             sparkleColumn(P.pos, 0x7dff6b);
-            ring(P.pos, 0x7dff6b, 8, 0.7);
-            showStageTitle(Math.min(STAGES.length - 1, m.i + 1));
+            ring(P.pos, 0x7dff6b, 9, 0.7);
+            confettiBurst(P.pos);
+            setTimeout(() => showStageTitle(Math.min(STAGES.length - 1, m.i + 1)), 1900);
         }
     });
+    room.onMessage('broke', (m) => { notEnough(m); sfx('denied'); });
     room.onMessage('won', (m) => {
         showWin(m);
         sfx('win'); rumble(0.8, 600);
@@ -811,8 +812,10 @@ function updateCamera(dt) {
     sun.target.position.copy(P.pos);
     // the accent lights ride along: one in the stage colour above and in front, one cool cyan behind
     const acc = STAGES[Math.max(0, P.stage)];
-    accentA.position.set(P.pos.x + Math.sin(t * 0.4) * 9, P.pos.y + 11, P.pos.z + Math.cos(t * 0.4) * 9);
-    accentB.position.set(P.pos.x - Math.sin(t * 0.4) * 10, P.pos.y + 6, P.pos.z - Math.cos(t * 0.4) * 10);
+    // kept on the tower side of the player, so they light the course rather than the walls
+    const tc = Math.hypot(P.pos.x, P.pos.z) || 1, ix = -P.pos.x / tc, iz = -P.pos.z / tc;
+    accentA.position.set(P.pos.x + ix * 10 + Math.sin(t * 0.4) * 3, P.pos.y + 10, P.pos.z + iz * 10 + Math.cos(t * 0.4) * 3);
+    accentB.position.set(P.pos.x + ix * 4 - iz * 8, P.pos.y + 5, P.pos.z + iz * 4 + ix * 8);
     accentA.color.lerp(accTmp.set(acc ? acc.bar : 0xff4ad8), Math.min(1, dt * 2));
     camFill.position.copy(camera.position).add(camDir.clone().multiplyScalar(4)).setY(camera.position.y + 6);
     camFill.target.position.copy(cam.target);
@@ -1011,7 +1014,7 @@ function update(dt) {
     const ice = P.ground && P.ground.ice;
     if (!P.hv) P.hv = new V3();
     if (ice || (P.onIce && !P.onGround)) {
-        const k = 1 - Math.exp(-dt * (P.onGround ? 2.4 : 1.6));
+        const k = 1 - Math.exp(-dt * (P.onGround ? 3.6 : 2.6));
         P.hv.x += (tx - P.hv.x) * k; P.hv.z += (tz - P.hv.z) * k;
     } else P.hv.set(tx, 0, tz);
     if (P.onGround) P.onIce = !!ice;
@@ -1206,6 +1209,9 @@ function update(dt) {
         renderProgress(marks);
     }
 }
+function confettiBurst(pos) {
+    for (const c of [0x46ff5a, 0xffd028, 0xff4ad8, 0x3ad8ff, 0xc45aff]) splash(pos.clone().add(new V3(0, 3, 0)), c, 6, 1.5);
+}
 let petKeyCache = '', petDefsCache = [];
 function equippedPetDefs() {
     const key = (S.equippedPets || []).join(',') + '|' + (S.pets || []).length;
@@ -1393,7 +1399,8 @@ if (import.meta.env.DEV) {
         sim: (secs, f, jumpEvery) => { for (let i = 0; i < Math.round(secs * 60); i++) { if (jumpEvery && i % jumpEvery === 0) pressJump(); botInput.f = f || 0; update(1 / 60); } botInput.f = 0; return window.__qa.state(); },
         look: (yaw, pitch, dist) => { cam.yaw = yaw; cam.pitch = pitch; cam.dist = dist; },
         face: (yaw) => { cam.yaw = yaw + Math.PI; P.facing = yaw; },
-        state: () => ({ x: +P.pos.x.toFixed(2), y: +P.pos.y.toFixed(2), z: +P.pos.z.toFixed(2), onGround: P.onGround, ground: P.ground && P.ground.mat, stage: P.stage, cp: S.stage, coins: S.coins, wins: S.wins, climbing: !!P.climbing, tool: S.tool }),
+        state: () => ({ x: +P.pos.x.toFixed(2), y: +P.pos.y.toFixed(2), z: +P.pos.z.toFixed(2), onGround: P.onGround, ground: P.ground && P.ground.mat, stage: P.stage, cp: S.stage, wins: S.wins, climbs: S.climbs, climbing: !!P.climbing, tool: S.tool }),
         tool: (id) => { S.gear[id] = true; actions.equip(id); },
+        course: { COURSE, CORNER_Y, cornerXZ, LAND },
     };
 }

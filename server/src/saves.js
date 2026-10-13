@@ -8,8 +8,8 @@ const SECRET = process.env.SAVE_SECRET || process.env.JWT_SECRET || 'asmr-tower-
 if (!process.env.SAVE_SECRET && !process.env.JWT_SECRET) console.warn('[saves] no SAVE_SECRET / JWT_SECRET; using the dev-only key');
 
 const FIELDS = [
-    'coins', 'totalCoins', 'wins', 'playtime', 'donated', 'stage', 'maxStage', 'best', 'pets', 'equippedPets', 'petSeq', 'trails', 'trail',
-    'gear', 'tool', 'passes', 'starterPack', 'coinBoostUntil', 'spins', 'spinAt', 'daily', 'gifts', 'giftDay', 'vipClaimAt', 'codes', 'firstPlay', 'freeBoxes',
+    'wins', 'totalWins', 'climbs', 'playtime', 'stage', 'maxStage', 'best', 'pets', 'equippedPets', 'petSeq', 'trails', 'trail',
+    'gear', 'tool', 'passes', 'starterPack', 'boostUntil', 'spins', 'spinAt', 'daily', 'gifts', 'giftDay', 'vipClaimAt', 'codes', 'firstPlay', 'freeBoxes',
 ];
 const MAX_LEN = 16000;
 

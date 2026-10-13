@@ -18,7 +18,9 @@ import { keyGrid, flushKeys, dynamicKeys, letterIndex } from './keys.js';
 import { gearModel } from './gear.js';
 import { petModel } from './pets.js';
 import { S, actions, net } from './state.js';
-import { CFG, STAGES, TOWER, LOBBY, GEAR, PASSES, passForGear, petById, fmt, playtimeText, rngFrom } from '../../shared/config.js';
+import { CFG, STAGES, TOWER, LOBBY, GEAR, PASSES, passForGear, petById, fmt, playtimeText, rngFrom, meltTime } from '../../shared/config.js';
+// how fast a stage's moving parts go: they speed up the higher you climb
+const spd = (zone) => (STAGES[zone] && STAGES[zone].speed) || 1;
 import { COURSE, CHECKPOINTS, COINS, SUMMIT, TOWER_GEAR } from '../../shared/course.js';
 
 export const SPAWN = new V3(LOBBY.spawn.x, LOBBY.spawn.y, LOBBY.spawn.z);
@@ -231,7 +233,7 @@ function buildLobby() {
     buildWorldsPortal();
     buildBoards();
     buildStatues();
-    buildDonateBoard();
+    buildShopBoard();
     // Gear pads along the east wall
     GEAR.forEach((g, i) => gearPad(g.id, 52, 1, -36 + i * 11.5, -1, 1));
     // Title on the east wall above the gear pads
@@ -299,7 +301,7 @@ function buildVip() {
     const lock = new T.Mesh(new T.BoxGeometry(0.8, 1, 0.3), gold); lock.position.set(0, 2.2, 1.5); chest.add(lock);
     chest.position.set(-7, 1, z1 + 5);
     zoneGroup(-1).add(chest);
-    billboard([{ t: 'VIP CHEST', c: '#ffd028', s: '#3a2000', px: 60 }, { t: '+Coins every 15 min', c: '#ffffff', s: '#3a2000', px: 34 }], 7, 512, new V3(-7, 6.4, z1 + 5), zoneGroup(-1));
+    billboard([{ t: 'VIP CHEST', c: '#ffd028', s: '#3a2000', px: 60 }, { t: '+Wins every 15 min', c: '#ffffff', s: '#3a2000', px: 34 }], 7, 512, new V3(-7, 6.4, z1 + 5), zoneGroup(-1));
     prompts.push({ pos: new V3(-7, 1, z1 + 5), r: 6, zone: -1, label: () => 'Open the VIP Chest', act: () => actions.vipChest() });
     // Stage teleporter pad
     const pad = new T.Mesh(new T.CylinderGeometry(3, 3.2, 0.5, 40), neon(0xff8ad8, 1.4)); pad.position.set(7, 1.25, z1 + 5); zoneGroup(-1).add(pad);
@@ -353,8 +355,8 @@ function buildWorldsPortal() {
     prompts.push({ pos: new V3(x, 1, z + 4), r: 7, zone: -1, label: () => 'Worlds', act: () => actions.openWorlds() });
 }
 
-// Leaderboards on the north wall: Total Playtime, Wins, Donations
-const BOARDS = [['playtime', 'Total Playtime', 36], ['wins', 'Wins', 14], ['donated', 'Donations Leaderboard', -8]];
+// Leaderboards on the north wall: Total Playtime, Wins earned, Top Climbers (summits reached)
+const BOARDS = [['playtime', 'Total Playtime', 36], ['wins', 'Wins', 14], ['climbs', 'Top Climbers', -8]];
 function buildBoards() {
     for (const [key, title, x] of BOARDS) {
         const frame = new T.Mesh(new RoundedBoxGeometry(19, 24, 1.4, 3, 0.8), mat(0x6a6a7e, { rough: 0.45 }));
@@ -388,13 +390,13 @@ function drawBoard(key, rows) {
         let n = r.n; while (x.measureText(n).width > 250 && n.length > 3) n = n.slice(0, -1);
         x.fillText(n, 96, y);
         x.textAlign = 'right'; x.fillStyle = '#9affb0';
-        x.fillText(key === 'playtime' ? playtimeText(r.v) : key === 'donated' ? fmt(r.v) + ' B' : fmt(r.v), W - 30, y);
+        x.fillText(key === 'playtime' ? playtimeText(r.v) : key === 'climbs' ? fmt(r.v) + ' 🗼' : fmt(r.v), W - 30, y);
     }
     b.tex.needsUpdate = true;
 }
 export function renderBoards(m) {
     for (const [key] of BOARDS) drawBoard(key, (m && m[key]) || []);
-    const top = (m && m.donated) || [];
+    const top = (m && m.climbs) || [];
     statues.forEach((st, i) => {
         const name = top[i] ? top[i].n : '—';
         if (st.name !== name) { st.name = name; st.label.userData.set([{ t: '#' + (i + 1) + ' ' + name, c: '#ffffff', s: '#7a2a6a', px: 50 }]); }
@@ -417,14 +419,15 @@ function buildStatues() {
         solids.push({ shape: 'cyl', cx: x, cz: 55, r: 2.8, min: new V3(x - 3, 0, 52), max: new V3(x + 3, 1 + h, 58), zone: -1, mat: 'block' });
     });
 }
-function buildDonateBoard() {
+function buildShopBoard() {
     const cv = document.createElement('canvas'); cv.width = 384; cv.height = 512;
     const x = cv.getContext('2d');
-    x.fillStyle = '#ffe23a'; x.fillRect(0, 0, 384, 512);
+    const bg = x.createLinearGradient(0, 0, 0, 512); bg.addColorStop(0, '#ffe23a'); bg.addColorStop(1, '#ffb01a');
+    x.fillStyle = bg; x.fillRect(0, 0, 384, 512);
     x.strokeStyle = '#2a2a3a'; x.lineWidth = 14; x.strokeRect(7, 7, 370, 498);
     x.fillStyle = '#2a2a3a'; x.font = '800 54px Montserrat, Arial Black, sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.fillText('DONATE', 192, 58);
-    ['10 Bux', '100 Bux', '500 Bux', '1000 Bux', '5000 Bux', '10000 Bux'].forEach((t, i) => {
+    x.fillText('WIN SHOP', 192, 58);
+    ['Speed Coil  150', 'VIP  3K', 'Grapple  5K', 'Jetpack  12K', 'Carpet  30K', 'Pets from  25'].map((t) => '🏆 ' + t).forEach((t, i) => {
         x.fillStyle = '#ffffff'; x.fillRect(36, 104 + i * 66, 312, 52);
         x.strokeStyle = '#2a2a3a'; x.lineWidth = 4; x.strokeRect(36, 104 + i * 66, 312, 52);
         x.fillStyle = '#2a2a3a'; x.font = '700 32px Fredoka, sans-serif'; x.fillText(t, 192, 131 + i * 66);
@@ -432,7 +435,7 @@ function buildDonateBoard() {
     const board = new T.Mesh(new T.BoxGeometry(12, 16, 0.8), [mat(0x2a2a3a), mat(0x2a2a3a), mat(0x2a2a3a), mat(0x2a2a3a), mat(0x2a2a3a), new T.MeshBasicMaterial({ map: texFrom(cv), toneMapped: false })]);
     board.position.set(-53, 11, H - 0.6);
     zoneGroup(-1).add(board);
-    prompts.push({ pos: new V3(-53, 1, H - 6), r: 7, zone: -1, label: () => '💖 Donate', act: () => actions.openDonate() });
+    prompts.push({ pos: new V3(-53, 1, H - 6), r: 7, zone: -1, label: () => '🏆 Win Shop', act: () => actions.openStore() });
 }
 
 // A gear pad: pedestal, neon ring, the gear spinning above it and its name and price
@@ -448,7 +451,7 @@ function gearPad(id, x, y, z, zone, scale) {
     glow.scale.set(9, 9, 1); glow.position.y = 3.6; grp.add(glow);
     const model = gearModel(id); model.position.y = 3.8; model.scale.multiplyScalar(scale || 1); grp.add(model);
     const pass = passForGear(id);
-    const label = billboard([{ t: def.name, c: '#ffffff', s: '#3a1a5a', px: 56 }, { t: '🅑 ' + PASSES[pass].price, c: '#7dff6b', s: '#1a3a1a', px: 46 }], 6.5, 512, new V3(0, 7.6, 0), grp);
+    const label = billboard([{ t: def.name, c: '#ffffff', s: '#3a1a5a', px: 56 }, { t: '🏆 ' + fmt(PASSES[pass].price), c: '#7dff6b', s: '#1a3a1a', px: 46 }], 6.5, 512, new V3(0, 7.6, 0), grp);
     const pad = { id, grp, model, label, owned: null, zone, x, y, z };
     gearPads.push(pad);
     triggers.push({ min: new V3(x - 2.6, y, z - 2.6), max: new V3(x + 2.6, y + 5, z + 2.6), zone, enter: () => actions.gearPad(id) });
@@ -467,7 +470,7 @@ export function refreshGearPads() {
         if (p.owned === key) continue;
         p.owned = key;
         const def = GEAR.find((g) => g.id === p.id);
-        p.label.userData.set([{ t: def.name, c: '#ffffff', s: '#3a1a5a', px: 56 }, owned ? { t: '✔ OWNED', c: '#7dff6b', s: '#1a3a1a', px: 46 } : { t: '🅑 ' + PASSES[passForGear(p.id)].price, c: '#7dff6b', s: '#1a3a1a', px: 46 }]);
+        p.label.userData.set([{ t: def.name, c: '#ffffff', s: '#3a1a5a', px: 56 }, owned ? { t: '✔ OWNED', c: '#7dff6b', s: '#1a3a1a', px: 46 } : { t: '🏆 ' + fmt(PASSES[passForGear(p.id)].price), c: '#7dff6b', s: '#1a3a1a', px: 46 }]);
     }
 }
 
@@ -638,7 +641,7 @@ function buildCourse() {
         zoneGroup(-2).add(glow);
         tickers.push((dt, t) => rgb.color.setHSL((t * 0.08) % 1, 1, 0.6).multiplyScalar(2.3));
     }
-    // Coins: one instanced mesh, spinning
+    // Floating trophy coins (+1 Win each): one instanced mesh, spinning
     const cg = new T.CylinderGeometry(1.1, 1.1, 0.3, 28);
     cg.rotateX(Math.PI / 2);
     coinMesh = new T.InstancedMesh(cg, [coinRimMaterial(), coinMaterial(), coinMaterial()], COINS.length);
@@ -794,7 +797,7 @@ function buildVanish(e) {
     vanishers.push(s);
 }
 // Called while someone stands on a vanishing jelly (main.js)
-export function touchVanish(s) { if (s.state === 0) { s.state = 1; s.t = 0.75; } }
+export function touchVanish(s) { if (s.state === 0) { s.state = 1; s.t = s.t0 = meltTime(s.zone); } }
 function buildSpinner(e) {
     const g = new T.Group(); g.position.set(e.x, e.top, e.z); zoneGroup(e.zone).add(g);
     const disc = new T.Mesh(new T.CylinderGeometry(e.r, e.r * 0.94, 1.6, 48), mochiMaterial());
@@ -809,7 +812,7 @@ function buildSpinner(e) {
     }
     const swirl = new T.Mesh(new T.TorusGeometry(e.r * 0.45, 0.12, 6, 40, Math.PI * 1.6), mat(0xffa8d0, { rough: 0.4 }));
     swirl.rotation.x = -Math.PI / 2; swirl.position.y = 0.04; g.add(swirl);
-    const s = { shape: 'cyl', cx: e.x, cz: e.z, r: e.r, min: new V3(e.x - e.r, e.top - 1.6, e.z - e.r), max: new V3(e.x + e.r, e.top, e.z + e.r), zone: e.zone, mat: 'mochi', spin: e.speed, g };
+    const s = { shape: 'cyl', cx: e.x, cz: e.z, r: e.r, min: new V3(e.x - e.r, e.top - 1.6, e.z - e.r), max: new V3(e.x + e.r, e.top, e.z + e.r), zone: e.zone, mat: 'mochi', spin: e.speed * spd(e.zone), g };
     solids.push(s); spinners.push(s);
 }
 function buildSweeper(e) {
@@ -818,7 +821,7 @@ function buildSweeper(e) {
     post.position.y = 1.2; g.add(post);
     const bar = new T.Mesh(roundGeo(e.len * 2, 1.1, 1.1, 0.5), vanishMaterial(0xff5aa8));
     bar.position.y = 1.6; bar.castShadow = true; g.add(bar);
-    sweepers.push({ cx: e.x, cz: e.z, y: e.y + 1.6, len: e.len, speed: e.speed, phase: e.phase, zone: e.zone, bar, g });
+    sweepers.push({ cx: e.x, cz: e.z, y: e.y + 1.6, len: e.len, speed: e.speed * spd(e.zone), phase: e.phase, zone: e.zone, bar, g });
     solids.push({ shape: 'cyl', cx: e.x, cz: e.z, r: 0.9, min: new V3(e.x - 0.9, e.y, e.z - 0.9), max: new V3(e.x + 0.9, e.y + 2.4, e.z + 0.9), zone: e.zone, mat: 'jelly' });
 }
 // Where a sweeper bar is, for the knock test in main.js: angle now
@@ -933,12 +936,12 @@ export function updateWorld(dt, t) {
         prevPos.copy(s.min);
         if (s.piston) {
             const e = s.piston;
-            const k = 0.5 - 0.5 * Math.cos((st / e.period + e.phase) * Math.PI * 2);
+            const k = 0.5 - 0.5 * Math.cos((st * spd(s.zone) / e.period + e.phase) * Math.PI * 2);
             const top = e.top - e.amp * k;
             s.min.y = top - 3; s.max.y = top;
             s.keyMesh.set(s.keyIdx, e.x, top, e.z, e.sx / 3.6, e.sz / 3.6, 1);
         } else {
-            const e = s.e, k = Math.sin((st / e.period + e.phase) * Math.PI * 2);
+            const e = s.e, k = Math.sin((st * spd(s.zone) / e.period + e.phase) * Math.PI * 2);
             const x = e.x + e.ax * k, y = e.y + e.ay * k, z = e.z + e.az * k;
             s.min.set(x - e.sx / 2, y - e.sy / 2, z - e.sz / 2);
             s.max.set(x + e.sx / 2, y + e.sy / 2, z + e.sz / 2);
@@ -952,7 +955,7 @@ export function updateWorld(dt, t) {
         if (s.state === 1) {
             s.t -= dt;
             s.mesh.position.set(s.home.x + (Math.random() - 0.5) * 0.25, s.home.y, s.home.z + (Math.random() - 0.5) * 0.25);
-            s.mesh.material.opacity = 0.35 + 0.45 * Math.max(0, s.t / 0.75);
+            s.mesh.material.opacity = 0.35 + 0.45 * Math.max(0, s.t / (s.t0 || 0.75));
             if (s.t <= 0) { s.state = 2; s.t = 3; s.off = true; s.mesh.visible = false; }
         } else if (s.state === 2) {
             s.t -= dt;

@@ -2,13 +2,13 @@ import { Room } from 'colyseus';
 import { GameState, PlayerState } from './schema.js';
 import {
     getProfile, hasProfile, markDirty, saveProfiles, adoptGuestProgress, loadProfile, releaseProfile,
-    topProfiles, recordSession, claimGrants, queueGrant, USE_DB,
+    topProfiles, recordSession, USE_DB,
 } from './profiles.js';
 import { sealProfile, openSave } from './saves.js';
-import { verifyBloxityToken, BUX_MODE } from './bloxity.js';
+import { verifyBloxityToken } from './bloxity.js';
 import {
-    CFG, LOBBY, PETS, petById, BOXES, boxById, rollBox, TRAILS, trailById, gearById, PASSES, PRODUCTS,
-    SPIN, rollSpin, GIFTS, DAILY, CODES, KITS, SKINS, dailyStatus, dayKey, rewardText, coinMult, equippedIds, petSlots, fmt, clamp,
+    CFG, LOBBY, STAGES, petById, boxById, rollBox, trailById, PASSES, PRODUCTS, priceOf,
+    SPIN, rollSpin, GIFTS, DAILY, CODES, KITS, SKINS, dailyStatus, dayKey, rewardText, winsMult, equippedIds, petSlots, fmt, clamp,
 } from '../../shared/config.js';
 import { CHECKPOINTS, COINS, SUMMIT } from '../../shared/course.js';
 
@@ -27,10 +27,9 @@ const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
 
 export const liveRooms = new Set();
 
-// One shared tower. Movement is client-side; everything that changes progress (Coins, Wins, pets,
-// trails, gear, spins) is decided here. Gear, VIP, Skip, Nuke All, Coin packs and donations are Bux:
-// in Bux mode (LEGION_WEBHOOK_SECRET set) only the Bloxity webhook grants them, otherwise (local
-// demo) the "buy" message grants them for free.
+// One shared tower. Movement is client-side; everything that changes progress (Wins, climbs, pets,
+// trails, gear, spins) is decided here. There are no real-money purchases: every price is in Wins,
+// checked and taken by the server.
 export class TowerRoom extends Room {
     maxClients = CFG.maxPlayers;
 
@@ -70,8 +69,6 @@ export class TowerRoom extends Room {
 
         this.setSimulationInterval((dt) => this.tick(dt), 1000);
         this.clock.setInterval(() => this.broadcastBoards(), 10000);
-        // Bux purchases made while the player was on another pod (or offline)
-        if (USE_DB) this.clock.setInterval(() => this.applyQueuedGrants(), 5000);
     }
 
     // A Bloxity token is verified with the Bloxity API; anyone else joins as a guest
@@ -109,18 +106,26 @@ export class TowerRoom extends Room {
             pos: { x: LOBBY.spawn.x, y: LOBBY.spawn.y, z: LOBBY.spawn.z },
             run: { cps: new Set(), coins: new Set(), start: 0 },
             joinedAt: Date.now(), lastWin: 0, giftClaimed: {}, friends: 0, guest, lastChat: 0, lastSlap: 0, playSecs: 0,
-            stats: { fresh: Date.now() - (profile.firstPlay || 0) < 60000, maxStage: -1, wins: 0, falls: 0, coins0: profile.totalCoins, buys: 0 },
+            stats: { fresh: Date.now() - (profile.firstPlay || 0) < 60000, maxStage: -1, climbs: 0, falls: 0, wins0: profile.totalWins, buys: 0 },
         };
         this.sessions.set(client.sessionId, s);
         this.syncPublic(client.sessionId);
-        client.send('hello', { now: Date.now(), bux: BUX_MODE, bloxity: uid.startsWith('legion_') });
+        client.send('hello', { now: Date.now(), bloxity: uid.startsWith('legion_') });
         this.sendProfile(client.sessionId);
         this.broadcastBoards(client);
-        if (USE_DB) this.applyQueuedGrants();
     }
 
     // Older saves / hand-edited data: keep every field the right shape
     fixProfile(p) {
+        // Saves from the first build had Coins (spendable) and wins (= summit climbs)
+        if (p.coins !== undefined) {
+            if (!p.climbs) p.climbs = p.wins || 0;
+            p.wins = p.coins || 0;
+            p.totalWins = Math.max(p.totalWins || 0, p.totalCoins || 0);
+            delete p.coins; delete p.totalCoins; delete p.donated; delete p.coinBoostUntil;
+        }
+        for (const k of ['wins', 'totalWins', 'climbs']) if (!finite(p[k])) p[k] = 0;
+        if (p.passes && p.passes.DoubleCoins) { p.passes.DoubleWins = true; delete p.passes.DoubleCoins; }
         if (!Array.isArray(p.pets)) p.pets = [];
         p.pets = p.pets.filter((x) => x && petById[x.id]).slice(0, CFG.maxPets);
         if (!Array.isArray(p.equippedPets)) p.equippedPets = [];
@@ -143,7 +148,7 @@ export class TowerRoom extends Room {
         const s = this.sessions.get(client.sessionId);
         if (!s) return;
         s.client = client;
-        client.send('hello', { now: Date.now(), bux: BUX_MODE, bloxity: s.profile.uid.startsWith('legion_') });
+        client.send('hello', { now: Date.now(), bloxity: s.profile.uid.startsWith('legion_') });
         this.sendProfile(client.sessionId);
         this.broadcastBoards(client);
     }
@@ -157,26 +162,13 @@ export class TowerRoom extends Room {
         const st = s.stats;
         recordSession({
             at: new Date(), secs: Math.round((Date.now() - s.joinedAt) / 1000), fresh: st.fresh, maxStage: st.maxStage,
-            endStage: s.profile.stage, wins: st.wins, falls: st.falls, coins: (s.profile.totalCoins || 0) - (st.coins0 || 0), buys: st.buys,
+            endStage: s.profile.stage, climbs: st.climbs, falls: st.falls, wins: (s.profile.totalWins || 0) - (st.wins0 || 0), buys: st.buys,
         }).catch((e) => console.warn('[stats]', e.message));
         if (!isOnline(s.profile.uid)) releaseProfile(s.profile.uid, isOnline);
     }
 
     // Colyseus awaits this on SIGTERM, which is how Legion stops a pod on every deploy
     onDispose() { liveRooms.delete(this); markDirty(); return saveProfiles(); }
-
-    async applyQueuedGrants() {
-        const uids = [...this.sessions.values()].map((s) => s.profile.uid);
-        let grants = [];
-        try { grants = await claimGrants(uids); } catch (e) { return console.warn('[DB] grants:', e.message); }
-        for (const g of grants) {
-            const entry = [...this.sessions].find(([, s]) => s.profile.uid === g.uid);
-            if (entry) { this.grant({ ...entry[1], id: entry[0] }, g.kind, g.key); continue; }
-            // Left between the query and now: put it back for their next visit
-            queueGrant(g.uid, g.name, g.kind, g.key, g.tx).catch(() => {});
-        }
-        if (grants.length) saveProfiles();
-    }
 
     // ----- helpers -----
     syncPublic(id) {
@@ -196,22 +188,22 @@ export class TowerRoom extends Room {
         if (!s) return;
         const p = s.profile;
         s.client.send('profile', {
-            coins: p.coins, totalCoins: p.totalCoins, wins: p.wins, playtime: p.playtime, donated: p.donated,
+            wins: p.wins, totalWins: p.totalWins, climbs: p.climbs, playtime: p.playtime,
             stage: p.stage, maxStage: p.maxStage, best: p.best, pets: p.pets, equippedPets: p.equippedPets,
             trails: p.trails, trail: p.trail, gear: p.gear, tool: p.tool, passes: p.passes, starterPack: p.starterPack,
-            coinBoostUntil: p.coinBoostUntil, spins: p.spins, spinAt: p.spinAt, daily: p.daily, codes: p.codes,
+            boostUntil: p.boostUntil, spins: p.spins, spinAt: p.spinAt, daily: p.daily, codes: p.codes,
             vipClaimAt: p.vipClaimAt, firstPlay: p.firstPlay, freeBoxes: p.freeBoxes || {}, giftClaimed: s.giftClaimed, sessionSecs: s.playSecs,
             save: sealProfile(p),
         });
     }
     changed(id) { this.syncPublic(id); this.sendProfile(id); markDirty(); }
     toast(s, text, color) { s.client.send('toast', { text, color: color || '#ffffff' }); }
-    mult(s) { return coinMult(s.profile, Date.now(), s.friends); }
-    addCoins(s, base, why, extra) {
+    mult(s) { return winsMult(s.profile, Date.now(), s.friends); }
+    addWins(s, base, why, extra) {
         const n = Math.max(1, Math.round(base * this.mult(s)));
-        s.profile.coins += n;
-        s.profile.totalCoins = (s.profile.totalCoins || 0) + n;
-        s.client.send('coins', { n, why, ...(extra || {}) });
+        s.profile.wins = (s.profile.wins || 0) + n;
+        s.profile.totalWins = (s.profile.totalWins || 0) + n;
+        s.client.send('earn', { n, why, ...(extra || {}) });
         return n;
     }
 
@@ -258,7 +250,7 @@ export class TowerRoom extends Room {
         s.stats.maxStage = Math.max(s.stats.maxStage, cp.i);
         if (!s.run.cps.has(cp.i)) {
             s.run.cps.add(cp.i);
-            this.addCoins(s, CFG.cpCoins, 'cp', { i: cp.i });
+            this.addWins(s, STAGES[cp.i].wins, 'cp', { i: cp.i });
         }
         this.changed(client.sessionId);
     }
@@ -267,7 +259,7 @@ export class TowerRoom extends Room {
         const c = COINS[m.i | 0];
         if (!s || !c || s.run.coins.has(c.i) || !this.near(s, c.x, c.y, c.z, 6, 7)) return;
         s.run.coins.add(c.i);
-        this.addCoins(s, CFG.coinPickup, 'coin', { i: c.i });
+        this.addWins(s, CFG.pickupWins, 'coin', { i: c.i });
         this.changed(client.sessionId);
     }
     onWin(client) {
@@ -281,13 +273,13 @@ export class TowerRoom extends Room {
         }
         const p = s.profile;
         s.lastWin = now;
-        p.wins = (p.wins || 0) + 1;
-        s.stats.wins++;
+        p.climbs = (p.climbs || 0) + 1;
+        s.stats.climbs++;
         if (!p.best || secs < p.best) p.best = Math.round(secs);
-        const n = this.addCoins(s, CFG.summitCoins, 'win');
-        client.send('won', { wins: p.wins, secs: Math.round(secs), coins: n, best: p.best });
+        const n = this.addWins(s, CFG.summitWins, 'win');
+        client.send('won', { climbs: p.climbs, secs: Math.round(secs), wins: n, best: p.best });
         this.broadcast('announce', { text: '🏆 ' + p.name + ' reached the top of ASMR Tower! (' + Math.round(secs) + 's)', color: GOLD }, { except: client });
-        // A fresh climb: checkpoints and coins pay again
+        // A fresh climb: checkpoints and floating trophies pay again
         p.stage = -1;
         s.run = { cps: new Set(), coins: new Set(), start: 0 };
         this.changed(client.sessionId);
@@ -301,18 +293,24 @@ export class TowerRoom extends Room {
         const s = this.sessions.get(client.sessionId);
         if (s) s.stats.falls++;
     }
-    // The Skip product moves your checkpoint one up (the client teleports there); in Bux mode it is
-    // granted by the webhook, so this message only handles the demo path through grant()
+    // Skip moves your checkpoint one up (the client teleports there)
     onSkip(client) { this.onBuy(client, { kind: 'product', key: 'Skip' }); }
 
-    // ----- Bux purchases -----
+    // ----- the Wins shop: the server checks the price, takes the Wins, then grants -----
     onBuy(client, m) {
         const s = this.sessions.get(client.sessionId);
-        if (!s || !m) return;
-        if (BUX_MODE) return this.toast(s, 'Purchases use Bux - log in to Bloxity', BLUE);
-        this.grant({ ...s, id: client.sessionId }, m.kind, m.key);
+        if (!s || !m || (m.kind !== 'pass' && m.kind !== 'product')) return;
+        const p = s.profile, key = String(m.key || '');
+        const item = (m.kind === 'pass' ? PASSES : PRODUCTS)[key];
+        if (!item) return;
+        if (m.kind === 'pass' && p.passes[key]) return this.toast(s, item.name + ' already owned!', BLUE);
+        if (key === 'StarterPack' && p.starterPack) return this.toast(s, 'Starter Pack already claimed!', BLUE);
+        if (key === 'Skip' && p.stage >= CHECKPOINTS.length - 1) return this.toast(s, 'You are already at the last checkpoint!', BLUE);
+        const price = priceOf(m.kind, key, p);
+        if ((p.wins || 0) < price) return client.send('broke', { need: price - (p.wins || 0), price, name: item.name });
+        p.wins -= price;
+        this.grant({ ...s, id: client.sessionId }, m.kind, key);
     }
-    // s is a live session, or a stand-in { profile, client: { send() {} } } for offline players
     grant(s, kind, key) {
         const client = s.client;
         const p = s.profile;
@@ -334,9 +332,9 @@ export class TowerRoom extends Room {
                 if (p.starterPack) { this.toast(s, 'Starter Pack already claimed!', BLUE); return true; }
                 p.starterPack = true;
                 p.gear.speedCoil = true; p.passes.SpeedCoil = true; p.tool = p.tool || 'speedCoil';
-                p.coins += 500; p.totalCoins += 500; p.spins += 3;
+                p.spins += 3;
                 this.givePet(s, 'pinkSlime', true);
-                this.toast(s, '🎁 Starter Pack: Speed Coil, 500 Coins, 3 Spins and a Pink Slime!', GOLD);
+                this.toast(s, '🎁 Starter Pack: Speed Coil, 3 Spins and a Pink Slime!', GOLD);
             } else if (key === 'Skip') {
                 if (p.stage >= CHECKPOINTS.length - 1) { this.toast(s, 'You are already at the last checkpoint!', BLUE); }
                 else {
@@ -346,27 +344,22 @@ export class TowerRoom extends Room {
                     client.send('skipTo', { i: p.stage });
                 }
             } else if (key === 'NukeAll') {
-                // Everyone else in the buyer's room falls back to the lobby. A purchase that lands
-                // while the buyer is offline is queued and fires when they next join.
+                // Everyone else in the buyer's room falls back to the lobby
                 if (s.id && this.broadcast) {
                     this.broadcast('nuke', { by: p.name, s: s.id }, { except: client });
                     this.toast(s, '☢️ You nuked everyone!', '#c8ff2a');
                     client.send('nukeSent', {});
                 }
-            } else if (prod.coins) {
-                p.coins += prod.coins; p.totalCoins += prod.coins;
-                this.toast(s, '+' + fmt(prod.coins) + ' Coins!', GOLD);
+            } else if (key === 'WinsBoost') {
+                p.boostUntil = Math.max(Date.now(), p.boostUntil || 0) + CFG.boostMinutes * 60000;
+                this.toast(s, '⏱️ x2 Wins for ' + CFG.boostMinutes + ' minutes!', GOLD);
             } else if (prod.spins) {
                 p.spins += prod.spins;
                 this.toast(s, '+' + prod.spins + ' Spins!', PINK);
-            } else if (prod.donate) {
-                p.donated = (p.donated || 0) + prod.donate;
-                this.toast(s, '💖 Thank you for donating ' + fmt(prod.donate) + ' Bux!', PINK);
-                if (this.broadcast && s.id) this.broadcast('announce', { text: '💖 ' + p.name + ' donated ' + fmt(prod.donate) + ' Bux!', color: PINK }, { except: client });
             }
             client.send('fx', { kind: 'confetti', key });
         }
-        if (s.id) { this.changed(s.id); this.broadcastBoards(); } else markDirty();
+        this.changed(s.id);
         return true;
     }
 
@@ -416,9 +409,9 @@ export class TowerRoom extends Room {
             return;
         }
         const cost = box.price * n;
-        if (p.coins < cost) return this.toast(s, 'Not enough Coins! You need ' + fmt(cost) + ' 🪙', RED);
+        if (p.wins < cost) return client.send('broke', { need: cost - p.wins, price: cost, name: box.name });
         if (p.pets.length + n > CFG.maxPets) return this.toast(s, 'Your pet inventory is full! Delete some pets first.', RED);
-        p.coins -= cost;
+        p.wins -= cost;
         this.hatchOut(s, box, n);
     }
     hatchOut(s, box, n) {
@@ -471,8 +464,8 @@ export class TowerRoom extends Room {
         const p = s.profile;
         if (!p.trails[d.id]) {
             if (d.vip) return this.toast(s, 'The VIP Gold trail comes with VIP!', GOLD);
-            if (p.coins < d.price) return this.toast(s, 'Not enough Coins! You need ' + fmt(d.price) + ' 🪙', RED);
-            p.coins -= d.price;
+            if (p.wins < d.price) return client.send('broke', { need: d.price - p.wins, price: d.price, name: d.name });
+            p.wins -= d.price;
             p.trails[d.id] = true;
             this.toast(s, d.name + ' unlocked!', GREEN);
         }
@@ -483,9 +476,9 @@ export class TowerRoom extends Room {
     // ----- rewards -----
     giveReward(s, r) {
         const p = s.profile;
-        if (r.coins) { p.coins += r.coins; p.totalCoins += r.coins; }
+        if (r.wins) { p.wins += r.wins; p.totalWins += r.wins; }
         if (r.spins) p.spins += r.spins;
-        if (r.boost) p.coinBoostUntil = Math.max(Date.now(), p.coinBoostUntil || 0) + CFG.coinBoostMinutes * 60000;
+        if (r.boost) p.boostUntil = Math.max(Date.now(), p.boostUntil || 0) + CFG.boostMinutes * 60000;
         if (r.box) {
             p.freeBoxes = p.freeBoxes || {};
             p.freeBoxes[r.box] = (p.freeBoxes[r.box] || 0) + 1;
@@ -553,14 +546,14 @@ export class TowerRoom extends Room {
         if (!p.passes.VIP) return this.toast(s, 'The VIP chest is for VIPs only!', GOLD);
         if (now - (p.vipClaimAt || 0) < CFG.vipChestMinutes * 60000) return this.toast(s, 'The VIP chest refills every ' + CFG.vipChestMinutes + ' minutes', BLUE);
         p.vipClaimAt = now;
-        this.addCoins(s, CFG.vipChestCoins, 'vip');
+        this.addWins(s, CFG.vipChestWins, 'vip');
         client.send('fx', { kind: 'confetti' });
         this.changed(client.sessionId);
     }
 
     broadcastBoards(client) {
         const row = (key) => topProfiles(key).filter((p) => (p[key] || 0) > 0).map((p) => ({ n: p.name, v: Math.floor(p[key] || 0) }));
-        const m = { wins: row('wins'), playtime: row('playtime'), donated: row('donated') };
+        const m = { wins: row('totalWins'), playtime: row('playtime'), climbs: row('climbs') };
         if (client) client.send('boards', m); else this.broadcast('boards', m);
     }
 
@@ -625,21 +618,4 @@ export class TowerRoom extends Room {
 function isOnline(uid) {
     for (const room of liveRooms) for (const s of room.sessions.values()) if (s.profile.uid === uid) return true;
     return false;
-}
-
-// Grants a Bux purchase confirmed by the Bloxity webhook, whether or not the player is online
-export async function grantPurchase(uid, name, kind, key, tx) {
-    for (const room of liveRooms) {
-        for (const [id, s] of room.sessions) {
-            if (s.profile.uid === uid) return room.grant({ ...s, id }, kind, key);
-        }
-    }
-    // Not on this pod: the pod hosting them (or their next join) applies it
-    if (USE_DB) { await queueGrant(uid, name, kind, key, tx); return true; }
-    await loadProfile(uid);
-    const profile = getProfile(uid, name, randomName());
-    const stub = { profile, client: { send() {} } };
-    const proto = TowerRoom.prototype;
-    proto.fixProfile(profile);
-    return proto.grant.call({ toast() {}, givePet: proto.givePet, changed() {}, broadcastBoards() {} }, stub, kind, key);
 }

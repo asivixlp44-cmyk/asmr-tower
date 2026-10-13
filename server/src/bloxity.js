@@ -1,10 +1,8 @@
-// Server-side Bloxity integration: identity verification, Bux webhook helpers and stat reporting.
+// Server-side Bloxity integration: identity verification and stat reporting.
+// This game has no in-app purchases (everything costs Wins), so there is no Bux webhook.
 import { allProfiles } from './profiles.js';
 
 export const API_URL = process.env.BLOXITY_API_URL || 'https://api.bloxity.io';
-// Bux mode: purchases are only granted by the Bloxity webhook (set on the live host)
-export const BUX_MODE = !!process.env.LEGION_WEBHOOK_SECRET || process.env.BUX_MODE === '1';
-export const WEBHOOK_SECRET = process.env.LEGION_WEBHOOK_SECRET || '';
 
 async function fetchJson(url, opts, ms) {
     const ctl = new AbortController();
@@ -34,7 +32,7 @@ export async function verifyBloxityToken(token) {
 // ----- Stat reporting to Bloxity profiles ("Only in this game") -----
 const STAT_DEFS = [
     { key: 'wins', label: 'Wins', type: 'number', sortOrder: 1 },
-    { key: 'coins', label: 'Coins', type: 'currency', sortOrder: 2 },
+    { key: 'climbs', label: 'Climbs', type: 'number', sortOrder: 2 },
     { key: 'best_stage', label: 'Best Stage', type: 'number', sortOrder: 3 },
     { key: 'playtime', label: 'Playtime', type: 'seconds', sortOrder: 4 },
 ];
@@ -52,7 +50,7 @@ export function installStatReporter() {
             for (const p of allProfiles()) {
                 if (!p.uid || !p.uid.startsWith('legion_')) continue;
                 const values = {};
-                const raw = { wins: Math.floor(p.wins || 0), coins: Math.floor(p.totalCoins || 0), best_stage: Math.floor(p.maxStage || 0), playtime: Math.floor(p.playtime || 0) * 1000 };
+                const raw = { wins: Math.floor(p.totalWins || 0), climbs: Math.floor(p.climbs || 0), best_stage: Math.floor(p.maxStage || 0), playtime: Math.floor(p.playtime || 0) * 1000 };
                 for (const d of STAT_DEFS) if (okValue(raw[d.key], d.type)) values[d.key] = raw[d.key];
                 if (Object.keys(values).length) players.push({ userId: p.uid.split('#m')[0], values });
             }
